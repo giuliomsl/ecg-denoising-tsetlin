@@ -1,4 +1,27 @@
-HEAD
+## Struttura del progetto
+
+```
+ecg-denoising-tsetlin/
+│
+├── src/                      # Codice sorgente
+│   ├── load_ecg.py
+│   ├── generate_noisy_ecg.py
+│   ├── preprocessing.py
+│   ├── binarization.py
+│   ├── ecg_dataset.py
+│   ├── ecg_utils.py
+│   ├── train_tm.py
+│   └── ...
+│
+├── config/                   # Configurazioni YAML
+├── data/                     # (Ignorata da Git) Contiene segnali .npy, MIT-BIH, rumore
+├── models/                   # (Ignorata) Salvataggio dei modelli
+├── requirements.txt
+├── .gitignore
+└── README.md
+```
+
+
 # denoising_ecg
 
 Progetto per il denoising del segnale ECG con Tsetlin Machines.
