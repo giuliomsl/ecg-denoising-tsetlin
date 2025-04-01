@@ -5,6 +5,18 @@ __pycache__/
 *.pyd
 data/
 logs/
+models/
+mit-bih/
+noise_stress_test/
+noisy_ecg/
+generated/
+notebooks/
+*.npy
+*.dat
+*.atr
+*.hea
+*.xws
+*.pkl
 
 # Byte-compiled / optimized / DLL files
 *.py[cod]
