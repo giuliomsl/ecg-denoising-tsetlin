@@ -31,6 +31,12 @@ def load_noise(noise_name, length):
     noise_record = wfdb.rdrecord(noise_path)
     noise_signal = noise_record.p_signal[:, 0]
 
+    """ Questo potrebbe ripetere o troncare il pattern di rumore in modo non realistico 
+    
+    Se il rumore è più corto, concatenarlo o selezionare un segmento casuale
+    
+    """
+
     # Ridimensioniamo il rumore alla lunghezza desiderata
     noise_signal = np.resize(noise_signal, length)
     return noise_signal

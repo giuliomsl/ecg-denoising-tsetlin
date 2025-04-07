@@ -44,3 +44,23 @@ class ECGDenoisingDataset:
         print(f"Record usati: {self.record_ids}")
         print(f"Forma X_noisy: {self.X_noisy.shape}")
         print(f"Forma X_clean: {self.X_clean.shape}")
+
+
+class ECGSamplewiseDataset:
+    def __init__(self, sample_dir="data/samplewise/"):
+        self.X_path = os.path.join(sample_dir, "X_train_samples.npy")
+        self.y_path = os.path.join(sample_dir, "y_train_samples.npy")
+
+        if not os.path.exists(self.X_path) or not os.path.exists(self.y_path):
+            raise FileNotFoundError("⚠️ File campionati non trovati. Esegui prima il preprocessing.")
+
+        self.X = np.load(self.X_path)
+        self.y = np.load(self.y_path)
+
+    def get_data(self):
+        return self.X, self.y
+
+    def summary(self):
+        print("✅ Dataset sample-wise caricato.")
+        print(f"X shape: {self.X.shape}")
+        print(f"y shape: {self.y.shape}")

@@ -57,4 +57,3 @@ idx = 0
 pred = tm.predict(X[idx].reshape(1, -1))[0]
 label = y_majority[idx]
 print(f"🔍 Finestra {idx}: Predetto = {pred}, Reale = {label}")
-

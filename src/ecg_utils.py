@@ -23,6 +23,8 @@ def plot_signal_comparison(clean, noisy, denoised=None, title_prefix="ECG"):
     """
     Plotta il confronto tra segnali: pulito, rumoroso, e opzionalmente denoised.
 
+    Si aspetta segnali numerici quindi va usato dopo la ricostruzione!!!!!
+
     Args:
         clean (np.ndarray): Segnale pulito.
         noisy (np.ndarray): Segnale rumoroso.
