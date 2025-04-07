@@ -37,6 +37,3 @@ Progetto per il denoising del segnale ECG con Tsetlin Machines.
 5) ecg_dataset.py: Carica dataset binarizzati pronti per addestrare e/o valutare TM
 
 6) ecg_utils.py: Calcolo SNR, normalizzazione, plot
-
-# ecg-denoising-tsetlin
-4c5d37317d411302f794e38dfe8dc327fa66c152
