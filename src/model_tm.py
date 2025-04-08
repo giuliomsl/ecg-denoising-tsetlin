@@ -1,1 +1,0 @@
-# Implementazione delle Tsetlin Machines

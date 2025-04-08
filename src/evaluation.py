@@ -1,1 +1,0 @@
-# Script per la valutazione
