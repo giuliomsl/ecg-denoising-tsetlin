@@ -1,6 +1,19 @@
-wfdb
+# Data Handling and Numerics
 numpy
-matplotlib
-tqdm
-pyyaml
 scikit-learn
+
+# Plotting
+matplotlib
+
+# ECG Data Handling
+wfdb
+
+# Tsetlin Machine Library
+pyTsetlinMachine
+
+# Parallelization (usato nel manager multi-label)
+joblib
+
+
+tqdm 
+PyYAML 
