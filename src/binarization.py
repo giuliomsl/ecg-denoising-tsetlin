@@ -60,23 +60,28 @@ def binarize_quantized(signal, n_bins=4, strategy='uniform'):
     return thermometer, bin_edges # Restituisce anche i bordi per la decodifica
 
 def binarize_quantized_adaptive(signal, n_bins=4):
-    """Quantizzazione adattiva (per quantili) con thermometer encoding."""
-    # n_bins: Iperparametro cruciale (es. 3, 4, 5, 8)
+    """Quantizzazione adattiva (per quantili) con thermometer encoding standard."""
     signal = signal.reshape(-1, 1)
-    # Usiamo subsample=None per coerenza se il dataset non è enorme, altrimenti default 200_000
     est = KBinsDiscretizer(n_bins=n_bins, encode='ordinal', strategy='quantile', subsample=None)
     quantized = est.fit_transform(signal).astype(int).flatten()
+    bin_edges = est.bin_edges_[0]
 
-    # Thermometer encoding: 1 se il livello è >= i, 0 altrimenti
-    # Esempio n_bins=4: Livello 0 -> [0,0,0,0], Livello 1 -> [1,0,0,0], Livello 2 -> [1,1,0,0], Livello 3 -> [1,1,1,0]
-    # Modifichiamo la logica per essere più standard:
+    # Thermometer encoding standard: bit j è 1 se livello >= j
+    # (Usiamo >= 1, >= 2, ..., >= n_bins-1 per avere n_bins-1 bit, oppure >=0,... per n_bins bit)
+    # Proviamo con n_bins bit: bit j è 1 se livello >= j (j da 0 a n_bins-1)
     thermometer = np.zeros((len(quantized), n_bins), dtype=np.uint8)
     for i in range(len(quantized)):
-        thermometer[i, :quantized[i]] = 1 # Imposta a 1 i bit fino al livello (escluso)
+        level = quantized[i]
+        for j in range(n_bins):
+            if level >= j:
+                thermometer[i, j] = 1
+    # Esempio n_bins=4:
+    # Livello 0: [1, 0, 0, 0] (>=0)
+    # Livello 1: [1, 1, 0, 0] (>=0, >=1)
+    # Livello 2: [1, 1, 1, 0] (>=0, >=1, >=2)
+    # Livello 3: [1, 1, 1, 1] (>=0, >=1, >=2, >=3)
 
-    # Salva i bin edges per la decodifica inversa (IMPORTANTE!)
-    bin_edges = est.bin_edges_[0]
-    # print(f"Bin edges calcolati (quantile, n_bins={n_bins}): {bin_edges}") # Debug
+    # Ora l'ultimo bit (indice 3 qui, indice 6 dopo concat) è 1 solo per il livello più alto.
     return thermometer, bin_edges
 
 def binarize_gradient_window(signal, window_size=10):

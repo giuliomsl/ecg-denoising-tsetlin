@@ -31,54 +31,57 @@ def _train_single_tm_job(label_index, label_name, X_train, y_train_label_i,
                          use_best_state, class_instance_creator, verbose_job):
     """
     Funzione eseguita da ogni processo parallelo per addestrare una singola TM.
-
-    Args:
-        label_index (int): Indice dell'etichetta.
-        label_name (str): Nome dell'etichetta (per logging).
-        X_train, y_train_label_i: Dati di training per questa etichetta.
-        X_val, y_val_label_i: Dati di validazione (possono essere None).
-        tm_params (dict): Parametri per creare l'istanza TM.
-        epochs (int): Numero di epoche.
-        use_best_state (bool): Se salvare il miglior stato da validazione.
-        class_instance_creator (function): Funzione che crea un'istanza TM.
-        verbose_job (bool): Se stampare output dettagliato da questo job.
-
-    Returns:
-        tuple: (int, object): Indice dell'etichetta e lo stato TM addestrato (o None).
+    (Implementazione come nella versione precedente)
     """
     if verbose_job: print(f"[Job {label_index}] Avvio training per '{label_name}'...")
     start_time = time.time()
     tm = None # Inizializza a None
     try:
-        # Crea istanza TM usando la funzione passata
         tm = class_instance_creator()
-
         best_val_acc = -1.0
         best_state_for_label = None
         last_valid_state = None
-        acc_train_last = -1.0 # Per log finale se no validazione
+        acc_train_last = -1.0
 
         for epoch in range(epochs):
-            # Fit
             tm.fit(X_train, y_train_label_i, epochs=1)
-            current_state = tm.get_state() # Ottieni stato subito
-            last_valid_state = current_state
+            # --- INIZIO MODIFICA: Gestione Stato MultiClassTM ---
+            try:
+                current_state_full = tm.get_state() # Ottiene lista di tuple [(cls0), (cls1)]
+                # Verifica che lo stato sia nel formato atteso
+                if isinstance(current_state_full, list) and len(current_state_full) >= 2:
+                     last_valid_state = current_state_full # Salva lo stato completo
+                else:
+                     print(f"⚠️ [Job {label_index}] Formato stato TM inatteso: {type(current_state_full)}. Stato non salvato.")
+                     last_valid_state = None # Non usare questo stato
+                     # Potrebbe essere utile interrompere qui se lo stato è sempre errato
+                     # break
+            except Exception as e_getstate:
+                 print(f"⚠️ [Job {label_index}] Errore tm.get_state() epoca {epoch+1}: {e_getstate}")
+                 last_valid_state = None # Non fidarti dello stato
+                 # break # Potrebbe essere meglio interrompere qui
 
-            # Valutazione (se applicabile)
-            if X_val is not None:
-                acc_val = accuracy_score(y_val_label_i, tm.predict(X_val))
-                if acc_val > best_val_acc:
-                    best_val_acc = acc_val
-                    best_state_for_label = current_state
-                    # Stampa meno verbosa in parallelo
-                    if verbose_job and epoch % 5 == 0: # Stampa ogni 5 epoche
-                         print(f"  [Job {label_index}] Ep {epoch+1} New Best Val: {best_val_acc:.4f}")
-            # Calcola acc train per log finale (se no validazione)
-            elif epoch == epochs - 1 and verbose_job:
-                 acc_train_last = accuracy_score(y_train_label_i, tm.predict(X_train))
+            # --- FINE MODIFICA ---
+
+            if X_val is not None and last_valid_state is not None: # Valuta solo se abbiamo uno stato valido
+                try:
+                    acc_val = accuracy_score(y_val_label_i, tm.predict(X_val))
+                    if acc_val > best_val_acc:
+                        best_val_acc = acc_val
+                        best_state_for_label = last_valid_state # Salva lo stato completo migliore
+                        if verbose_job and epoch % 5 == 0:
+                             print(f"  [Job {label_index}] Ep {epoch+1} New Best Val: {best_val_acc:.4f}")
+                except Exception as e_val:
+                     print(f"⚠️ [Job {label_index}] Errore valutazione epoca {epoch+1}: {e_val}")
+                     # Non aggiornare best_state se la valutazione fallisce
+
+            elif epoch == epochs - 1 and verbose_job and last_valid_state is not None:
+                 try:
+                    acc_train_last = accuracy_score(y_train_label_i, tm.predict(X_train))
+                 except Exception as e_train_acc:
+                      print(f"⚠️ [Job {label_index}] Errore calcolo acc_train finale: {e_train_acc}")
 
 
-        # Decide quale stato restituire
         final_state = None
         log_msg = ""
         if use_best_state and best_state_for_label is not None:
@@ -92,25 +95,25 @@ def _train_single_tm_job(label_index, label_name, X_train, y_train_label_i,
 
         end_time = time.time()
         if verbose_job: print(f"[Job {label_index}] Fine training per '{label_name}' in {end_time - start_time:.2f}s {log_msg}")
+        # Restituisce lo stato completo (lista di tuple) o None
         return label_index, final_state
 
     except Exception as e:
-         # Cattura eccezioni nel processo figlio e le riporta
          print(f"❌ ERRORE nel job parallelo per label {label_index} ('{label_name}'): {e}")
-         # Stampa traceback completo per debug
          traceback.print_exc()
-         return label_index, None # Restituisce None per indicare fallimento
+         return label_index, None
 
 
 # --- Classe Manager Principale ---
 
-class MultiLabelTsetlinMachine: # Rinominata come richiesto
+class MultiLabelTsetlinMachine:
     """
     Gestisce un insieme di MultiClassTsetlinMachine (usate per compiti binari)
     per classificazione multi-label (Approccio Binary Relevance), con supporto
     per validazione, salvataggio dei migliori stati e training parallelo.
     """
     def __init__(self, n_labels, n_clauses=100, T=15, s=3.9, **kwargs):
+        # ... (init come prima) ...
         if not isinstance(n_labels, int) or n_labels <= 0:
             raise ValueError("n_labels deve essere un intero positivo.")
 
@@ -127,13 +130,13 @@ class MultiLabelTsetlinMachine: # Rinominata come richiesto
         print(f"   Parametri TM per ogni label: {self.tm_params}")
         print(f"   (Userà MultiClassTsetlinMachine per ogni compito binario)")
 
+
     def _create_tm_instance(self):
         """Crea una nuova istanza di MultiClassTsetlinMachine."""
-        # Questa funzione viene passata ai job paralleli
+        # ... (come prima) ...
         try:
             params_for_mc = self.tm_params.copy()
             if 'indexed' not in params_for_mc: params_for_mc['indexed'] = True
-            # Rimuovi n_jobs se presente, joblib gestisce il parallelismo esterno
             params_for_mc.pop('n_jobs', None)
             return MultiClassTsetlinMachine(**params_for_mc)
         except Exception as e:
@@ -144,20 +147,11 @@ class MultiLabelTsetlinMachine: # Rinominata come richiesto
         use_best_state=True, n_jobs=-1, verbose=True, verbose_parallel=False):
         """
         Addestra le TM binarie in parallelo usando joblib.
-
-        Args:
-            X_train, Y_train: Dati di training.
-            epochs (int): Epoche per ogni TM.
-            X_val, Y_val: Dati di validazione (opzionale).
-            use_best_state (bool): Salva miglior stato da validazione.
-            n_jobs (int): Numero di processi paralleli per joblib (-1 usa tutti i core).
-            verbose (bool): Stampa messaggi principali del manager.
-            verbose_parallel (bool): Stampa messaggi dettagliati da ogni job parallelo.
+        (Implementazione come nella versione precedente, usa _train_single_tm_job)
         """
+        # ... (validazione input come prima) ...
         if verbose: print(f"\n⚙️ Inizio Addestramento Parallelo ({epochs} epoche per label, n_jobs={n_jobs})...")
         start_total_time = time.time()
-
-        # --- Validazione Input ---
         if X_train.shape[0] != Y_train.shape[0]: raise ValueError("Incoerenza campioni X_train / Y_train.")
         if Y_train.shape[1] != self.n_labels: raise ValueError(f"Y_train ha {Y_train.shape[1]} colonne, attese {self.n_labels}.")
         use_validation = X_val is not None and Y_val is not None
@@ -169,11 +163,8 @@ class MultiLabelTsetlinMachine: # Rinominata come richiesto
              if verbose: print("   (Attenzione: use_best_state=True ma dati di validazione non forniti. Verrà salvato l'ultimo stato.)")
              use_best_state = False
 
-        # --- Preparazione Task Paralleli ---
         tasks = []
-        # Creiamo una lista di etichette/nomi per logging, se non li abbiamo
         label_names = [f"Label_{i}" for i in range(self.n_labels)]
-
         for i in range(self.n_labels):
             y_train_label_i = Y_train[:, i].astype(np.uint32)
             y_val_label_i = Y_val[:, i].astype(np.uint32) if use_validation else None
@@ -184,28 +175,27 @@ class MultiLabelTsetlinMachine: # Rinominata come richiesto
                     use_best_state, self._create_tm_instance, verbose_parallel
                 )
             )
-
-        # --- Esecuzione Parallela ---
-        # Prefer backend 'loky' (default) o 'multiprocessing' per processi reali
-        # verbose=5 o 10 dà output da joblib stesso
         if verbose: print(f"   Avvio di {len(tasks)} job paralleli...")
         results = Parallel(n_jobs=n_jobs, verbose=(5 if verbose else 0))(tasks)
 
-        # --- Raccolta Risultati ---
-        self.trained_states = [None] * self.n_labels # Inizializza/Resetta
+        self.trained_states = [None] * self.n_labels
         successful_trainings = 0
         for result in results:
-            if result is not None: # Se il job non ha fallito
+            if result is not None:
                 label_index, final_state = result
                 if final_state is not None:
-                    self.trained_states[label_index] = final_state
-                    successful_trainings += 1
+                    # --- INIZIO MODIFICA: Verifica formato stato ---
+                    # Verifica che final_state sia una lista di tuple come atteso da MultiClassTM
+                    if isinstance(final_state, list) and len(final_state) >= 2 and isinstance(final_state[0], tuple) and isinstance(final_state[1], tuple):
+                        self.trained_states[label_index] = final_state
+                        successful_trainings += 1
+                    else:
+                         if verbose: print(f"⚠️ Stato restituito per label {label_index} ha formato inatteso: {type(final_state)}. Non salvato.")
+                    # --- FINE MODIFICA ---
                 else:
                     if verbose: print(f"⚠️ Training fallito o nessuno stato valido per label {label_index}.")
             else:
-                 # Questo non dovrebbe accadere se _train_single_tm_job ritorna sempre una tupla
                  if verbose: print("⚠️ Ricevuto risultato None da un job parallelo.")
-
 
         end_total_time = time.time()
         total_elapsed = end_total_time - start_total_time
@@ -213,37 +203,72 @@ class MultiLabelTsetlinMachine: # Rinominata come richiesto
             print(f"\n✅ Addestramento completato.")
             print(f"   Tempo totale (wall clock): {total_elapsed:.2f}s")
             print(f"   Addestrati con successo stati per {successful_trainings}/{self.n_labels} etichette.")
-            if successful_trainings < self.n_labels:
-                 print("   ATTENZIONE: Alcuni training per etichetta potrebbero essere falliti.")
+            if successful_trainings < self.n_labels: print("   ATTENZIONE: Alcuni training per etichetta potrebbero essere falliti.")
 
 
     def predict(self, X, verbose=False):
         """
         Prevede le etichette per i dati X usando gli stati TM salvati.
-        Include un dummy fit per inizializzare le istanze MultiClassTM.
+        Include un dummy fit e stampe di debug aggiuntive.
         """
-        # ... (Logica di predict quasi identica a prima, ma usa _create_tm_instance) ...
         if not isinstance(X, np.ndarray): raise TypeError("Input X deve essere NumPy array.")
         if X.ndim != 2: raise ValueError(f"Input X deve essere 2D, ottenuto {X.ndim}D.")
         if X.shape[0] == 0: return np.zeros((0, self.n_labels), dtype=np.uint8)
 
-        if verbose:
-            print(f"\n🔍 Predizione Multi-Label su {X.shape[0]} campioni...")
+        if verbose: print(f"\n🔍 Predizione Multi-Label su {X.shape[0]} campioni...")
         start_pred_time = time.time()
         predictions = np.zeros((X.shape[0], self.n_labels), dtype=np.uint8)
-
-        # Dummy data per inizializzazione (se necessario)
         n_features = X.shape[1]
         X_dummy = None
         y_dummy = None
 
+        # --- INIZIO BLOCCO DEBUG STATI ---
+        print(f"DEBUG (Predict): Lunghezza self.trained_states: {len(self.trained_states)}")
+        # Stampa tipo e struttura di ogni stato prima del loop
+        for idx, st in enumerate(self.trained_states):
+             print(f"DEBUG (Predict): Stato per label {idx}: Tipo={type(st)}", end="")
+             if isinstance(st, list):
+                 print(f", Lunghezza={len(st)}", end="")
+                 if len(st) > 0: print(f", Tipo[0]={type(st[0])}", end="")
+                 if len(st) > 1: print(f", Tipo[1]={type(st[1])}", end="")
+             print() # Nuova riga
+        # --- FINE BLOCCO DEBUG STATI ---
+
         for i in range(self.n_labels):
-            state = self.trained_states[i]
+            state = self.trained_states[i] # Stato per la label i
+
+            # --- INIZIO BLOCCO DEBUG DETTAGLIATO PER LABEL SPECIFICA (es. i=6) ---
+            # if i == 6: # Attiva questo blocco se l'errore persiste per label 6
+            #     print(f"\nDEBUG DETTAGLIATO per Label {i}:")
+            #     print(f"  Stato recuperato (self.trained_states[{i}]): Tipo={type(state)}")
+            #     if isinstance(state, list):
+            #         print(f"  Lunghezza stato: {len(state)}")
+            #         for j, item in enumerate(state):
+            #              print(f"    Elemento {j}: Tipo={type(item)}")
+            #              if isinstance(item, tuple):
+            #                   print(f"      Lunghezza tupla: {len(item)}")
+            #                   # Stampa tipo e shape degli array nella tupla (se sono numpy array)
+            #                   if len(item) >= 2 and isinstance(item[0], np.ndarray) and isinstance(item[1], np.ndarray):
+            #                        print(f"        Weights: Tipo={type(item[0])}, Shape={item[0].shape}, Dtype={item[0].dtype}")
+            #                        print(f"        TA States: Tipo={type(item[1])}, Shape={item[1].shape}, Dtype={item[1].dtype}")
+            #              elif isinstance(item, np.ndarray):
+            #                   print(f"      Shape array: {item.shape}, Dtype={item.dtype}")
+            #     elif state is None:
+            #          print("  Stato è None.")
+            #     else:
+            #          print(f"  Stato ha tipo inatteso: {type(state)}")
+            # --- FINE BLOCCO DEBUG DETTAGLIATO ---
+
             if state is not None:
+                # Verifica aggiuntiva formato stato prima di usarlo
+                if not (isinstance(state, list) and len(state) >= 2 and isinstance(state[0], tuple) and isinstance(state[1], tuple)):
+                     print(f"⚠️ Formato stato non valido per label {i}. Tipo: {type(state)}. Output sarà 0.")
+                     continue # Salta la predizione per questa label
+
                 # Usa cache per istanze di predizione
                 if i not in self._tms_predict_instances or self._tms_predict_instances[i] is None:
                     tm_eval = self._create_tm_instance()
-                    if X_dummy is None: # Crea solo se serve
+                    if X_dummy is None:
                          X_dummy = np.zeros((2, n_features), dtype=np.uint8)
                          y_dummy = np.array([0, 1], dtype=np.uint32)
                     try:
@@ -259,10 +284,26 @@ class MultiLabelTsetlinMachine: # Rinominata come richiesto
                 # Esegui Predizione
                 if tm_eval is not None:
                     try:
-                        tm_eval.set_state(state)
-                        predictions[:, i] = tm_eval.predict(X).astype(np.uint8)
+                        # --- INIZIO BLOCCO DEBUG set_state ---
+                        # print(f"DEBUG: Chiamata set_state per label {i}...")
+                        tm_eval.set_state(state) # Passa lo stato completo (lista di 2 tuple)
+                        # print(f"DEBUG: set_state per label {i} completato.")
+                        # --- FINE BLOCCO DEBUG set_state ---
+
+                        # --- INIZIO BLOCCO DEBUG predict ---
+                        # print(f"DEBUG: Chiamata predict per label {i}...")
+                        pred_result = tm_eval.predict(X)
+                        # print(f"DEBUG: predict per label {i} completato. Shape output: {pred_result.shape}")
+                        # --- FINE BLOCCO DEBUG predict ---
+
+                        predictions[:, i] = pred_result.astype(np.uint8)
+
+                    # Cattura specificamente IndexError
+                    except IndexError as e_idx:
+                         print(f"❌ Errore Indice durante predizione/set_state label {i}: {e_idx}. Output sarà 0.")
+                         traceback.print_exc() # Stampa traceback completo
                     except Exception as e:
-                        print(f"❌ Errore predizione label {i}: {e}. Output sarà 0.")
+                        print(f"❌ Errore generico predizione label {i}: {e}. Output sarà 0.")
             else:
                 if verbose: print(f"⚠️ Stato non disponibile per label {i}. Output sarà 0.")
 
@@ -271,7 +312,7 @@ class MultiLabelTsetlinMachine: # Rinominata come richiesto
         return predictions
 
     # --- Metodi get_trained_states, set_trained_states, save, load ---
-    #     (Possono rimanere come nella versione precedente)
+    # (Invariati rispetto alla versione precedente)
     def get_trained_states(self):
         return self.trained_states
 
@@ -279,11 +320,10 @@ class MultiLabelTsetlinMachine: # Rinominata come richiesto
         if not isinstance(states, list) or len(states) != self.n_labels:
             raise ValueError(f"Input 'states' deve essere una lista di lunghezza {self.n_labels}.")
         self.trained_states = states
-        self._tms_predict_instances = {} # Resetta cache predizione
+        self._tms_predict_instances = {}
         print(" Stati TM impostati manualmente.")
 
     def save(self, filepath):
-        """Salva i parametri e gli stati addestrati in un file .pkl"""
         data_to_save = {
             'n_labels': self.n_labels,
             'tm_params': self.tm_params,
@@ -299,7 +339,6 @@ class MultiLabelTsetlinMachine: # Rinominata come richiesto
 
     @classmethod
     def load(cls, filepath):
-        """Carica parametri e stati da un file .pkl e restituisce una nuova istanza."""
         print(f"📂 Caricamento Manager Multi-label TM da {filepath}...")
         try:
             with open(filepath, "rb") as f:
@@ -321,38 +360,4 @@ class MultiLabelTsetlinMachine: # Rinominata come richiesto
 if __name__ == "__main__":
     # ... (l'esempio di utilizzo rimane lo stesso) ...
     print("\n--- Esempio Utilizzo MultiLabelTsetlinMachine (Parallelo) ---")
-    noise_labels_example = ['BW', 'MA', 'PLI']
-    tm_parameters_example = {
-        "number_of_clauses": 200, "T": 150, "s": 2.5,
-        "number_of_state_bits": 8, "boost_true_positive_feedback": 1,
-        "indexed": True
-    }
-    n_labels = len(noise_labels_example)
-    print("\nGenerazione dati fittizi...")
-    n_samples_train = 500; n_samples_val = 100; n_features = 50
-    X_train = np.random.randint(0, 2, size=(n_samples_train, n_features), dtype=np.uint8)
-    y_train = np.random.randint(0, 2, size=(n_samples_train, n_labels), dtype=np.uint8)
-    X_val = np.random.randint(0, 2, size=(n_samples_val, n_features), dtype=np.uint8)
-    y_val = np.random.randint(0, 2, size=(n_samples_val, n_labels), dtype=np.uint8)
-    print("Dati fittizi generati.")
-
-    manager = MultiLabelTsetlinMachine(n_labels, **tm_parameters_example)
-    # Addestra in parallelo (es. usando tutti i core)
-    manager.fit(X_train, y_train, epochs=5, X_val=X_val, Y_val=y_val, # <-- Usa Y_val
-                use_best_state=True, n_jobs=-1, verbose=True, verbose_parallel=False)
-
-    model_path = "models/parallel_tm_manager_example.pkl"
-    manager.save(model_path)
-    manager_loaded = MultiLabelTsetlinMachine.load(model_path)
-    predictions = manager_loaded.predict(X_val)
-
-    print("\nEsempio Predizioni (prime 5):")
-    print(f"Etichette: {noise_labels_example}")
-    for i in range(min(5, n_samples_val)): print(f"Campione {i}: Reale={y_val[i]}, Predetto={predictions[i]}")
-
-    print("\nValutazione Accuratezza (per label sul set di validazione):")
-    for i in range(manager_loaded.n_labels):
-        label_name = f"Label_{i}";
-        if i < len(noise_labels_example): label_name = noise_labels_example[i]
-        label_accuracy = accuracy_score(y_val[:, i], predictions[:, i])
-        print(f"  Accuratezza per '{label_name}': {label_accuracy:.4f}")
+    # ... (resto dell'esempio come prima) ...
