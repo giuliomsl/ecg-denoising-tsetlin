@@ -5,14 +5,89 @@ import wfdb
 # Assicurati che binarization.py sia nella stessa directory o nel PYTHONPATH
 from binarization import binarize, save_binarization_info
 import pickle # Necessario se save_binarization_info usa pickle
+import sys
 
-# === Configurazione ===
-ECG_DIR = "data/mit-bih/"
-NOISY_DIR = "data/noisy_ecg/"
-# PROCESSED_DIR = "data/processed_multilabel/" # Non più usato direttamente qui
-SAMPLE_DIR = "data/samplewise/"
-BIN_INFO_PATH = os.path.join(SAMPLE_DIR, "binarization_info.pkl") # Percorso per info decodifica
-os.makedirs(SAMPLE_DIR, exist_ok=True)
+# --- Rilevamento Ambiente e Definizione Percorsi ---
+
+# Verifica se siamo in Google Colab
+IN_COLAB = 'google.colab' in sys.modules
+
+if IN_COLAB:
+    print("INFO: Rilevato ambiente Google Colab.")
+    from google.colab import drive
+    # Monta Google Drive se non già montato
+    if not os.path.exists('/content/drive/MyDrive'):
+         print("INFO: Montaggio Google Drive...")
+         drive.mount('/content/drive')
+         # Attendi un attimo per assicurarti che il mount sia completo
+         import time
+         time.sleep(5)
+    else:
+         print("INFO: Google Drive già montato.")
+
+    # Definisci i percorsi base per Colab (ASSUMENDO la tua struttura su Drive)
+    GDRIVE_BASE = "/content/drive/MyDrive/Tesi_ECG_Denoising/" # Modifica se necessario
+    REPO_NAME = "TUO_REPO_NAME" # Il nome della cartella clonata da GitHub
+    PROJECT_ROOT_COLAB = f"/content/{REPO_NAME}/" # Percorso del progetto clonato
+
+    # Percorsi Dati su Drive
+    DATA_DIR_COLAB = os.path.join(GDRIVE_BASE, "data")
+    ECG_DIR = os.path.join(DATA_DIR_COLAB, "mit-bih/")
+    NOISE_DIR = os.path.join(DATA_DIR_COLAB, "noise_stress_test/")
+    NOISY_ECG_DIR = os.path.join(DATA_DIR_COLAB, "noisy_ecg/")
+    SAMPLE_DATA_DIR = os.path.join(DATA_DIR_COLAB, "samplewise/")
+
+    # Percorsi Output Modelli su Drive
+    MODEL_OUTPUT_DIR = os.path.join(GDRIVE_BASE, "models/multi_tm_denoiser/")
+
+    # Percorso per info binarizzazione su Drive
+    BIN_INFO_PATH = os.path.join(SAMPLE_DATA_DIR, "binarization_info.pkl")
+
+    # Assicurati che le directory di output esistano su Drive
+    os.makedirs(MODEL_OUTPUT_DIR, exist_ok=True)
+    # Potrebbe essere necessario creare anche NOISY_ECG_DIR e SAMPLE_DATA_DIR se
+    # esegui anche i preprocessing su Colab la prima volta.
+    os.makedirs(NOISY_ECG_DIR, exist_ok=True)
+    os.makedirs(SAMPLE_DATA_DIR, exist_ok=True)
+
+else:
+    print("INFO: Rilevato ambiente Locale.")
+    # Definisci i percorsi relativi per l'ambiente locale
+    # Assumiamo che lo script sia eseguito dalla root del progetto
+    # o che i percorsi relativi funzionino dalla posizione dello script.
+    # Se esegui da src/, potresti dover usare '../data' etc.
+    PROJECT_ROOT_LOCAL = "." # O specifica il percorso assoluto/relativo corretto
+    DATA_DIR_LOCAL = os.path.join(PROJECT_ROOT_LOCAL, "data")
+
+    ECG_DIR = os.path.join(DATA_DIR_LOCAL, "mit-bih/")
+    NOISE_DIR = os.path.join(DATA_DIR_LOCAL, "noise_stress_test/")
+    NOISY_ECG_DIR = os.path.join(DATA_DIR_LOCAL, "noisy_ecg/")
+    SAMPLE_DATA_DIR = os.path.join(DATA_DIR_LOCAL, "samplewise/")
+    MODEL_OUTPUT_DIR = os.path.join(PROJECT_ROOT_LOCAL, "models/multi_tm_denoiser/")
+    BIN_INFO_PATH = os.path.join(SAMPLE_DATA_DIR, "binarization_info.pkl")
+
+    # Assicurati che le directory di output esistano localmente
+    os.makedirs(MODEL_OUTPUT_DIR, exist_ok=True)
+    os.makedirs(NOISY_ECG_DIR, exist_ok=True) # Se generate_noisy_ecg è separato
+    os.makedirs(SAMPLE_DATA_DIR, exist_ok=True) # Se preprocessing è separato
+
+# --- Usa le variabili definite sopra nel resto dello script ---
+# Esempio in train_tm_multilabel.py:
+# dataset = ECGSamplewiseDataset(SAMPLE_DATA_DIR) # Usa la variabile definita sopra
+# binarization_info = load_binarization_info(BIN_INFO_PATH)
+# MODEL_SAVE_PATH = os.path.join(MODEL_OUTPUT_DIR, MODEL_FILENAME)
+# manager.save(MODEL_SAVE_PATH)
+# etc...
+
+# Esempio in preprocessing_multilabel.py:
+# ECG_DIR = ECG_DIR # Usa la variabile definita sopra
+# NOISY_ECG_DIR = NOISY_ECG_DIR # Attenzione ai nomi delle variabili!
+# SAMPLE_DATA_DIR = SAMPLE_DATA_DIR
+# BIN_INFO_PATH = BIN_INFO_PATH
+# ...
+# np.save(os.path.join(SAMPLE_DATA_DIR, "X_train_samples.npy"), X_total_bin)
+# save_binarization_info(saved_binarization_info, BIN_INFO_PATH)
+
 
 WINDOW_SIZE = 1024
 CONTEXT_K = 10  # finestra di contesto ±k → 2k+1
@@ -37,7 +112,7 @@ def load_clean_ecg_segment(record_name):
     return record.p_signal[start_sample:end_sample, 0]
 
 def load_noisy_ecg(record_name):
-    path = os.path.join(NOISY_DIR, f"{record_name}_noisy_{START}-{START+DURATION}s.npy")
+    path = os.path.join(NOISY_ECG_DIR, f"{record_name}_noisy_{START}-{START+DURATION}s.npy")
     if not os.path.exists(path):
         raise FileNotFoundError(f"File rumoroso non trovato: {path}")
     return np.load(path)
@@ -110,7 +185,7 @@ def extract_samples(clean_segments_num, noisy_segments_num,
 
 # --- Funzione Principale di Preprocessing (Modificata) ---
 def preprocess_and_save_all():
-    noisy_files = sorted([f for f in os.listdir(NOISY_DIR) if f.endswith(f"_{START}-{START+DURATION}s.npy")])
+    noisy_files = sorted([f for f in os.listdir(NOISY_ECG_DIR) if f.endswith(f"_{START}-{START+DURATION}s.npy")])
     record_ids = sorted(list(set(f.split("_")[0] for f in noisy_files))) # Usa list()
 
     all_X_bin = []
@@ -201,12 +276,12 @@ def preprocess_and_save_all():
     y_total_noisy_num = np.concatenate(all_y_noisy_num) # Opzionale
 
     print("💾 Salvataggio finale dei file campionati...")
-    np.save(os.path.join(SAMPLE_DIR, "X_train_samples.npy"), X_total_bin)
-    np.save(os.path.join(SAMPLE_DIR, "y_train_samples.npy"), y_total_bin)
-    np.save(os.path.join(SAMPLE_DIR, "y_clean_numeric_samples.npy"), y_total_clean_num)
-    np.save(os.path.join(SAMPLE_DIR, "y_noisy_numeric_samples.npy"), y_total_noisy_num) # Opzionale
+    np.save(os.path.join(SAMPLE_DATA_DIR, "X_train_samples.npy"), X_total_bin)
+    np.save(os.path.join(SAMPLE_DATA_DIR, "y_train_samples.npy"), y_total_bin)
+    np.save(os.path.join(SAMPLE_DATA_DIR, "y_clean_numeric_samples.npy"), y_total_clean_num)
+    np.save(os.path.join(SAMPLE_DATA_DIR, "y_noisy_numeric_samples.npy"), y_total_noisy_num) # Opzionale
 
-    print(f"\n✅ Salvataggio completato in '{SAMPLE_DIR}':")
+    print(f"\n✅ Salvataggio completato in '{SAMPLE_DATA_DIR}':")
     print(f"   X_train_samples.npy (binario, input TM): {X_total_bin.shape}")
     print(f"   y_train_samples.npy (binario, target TM): {y_total_bin.shape}")
     print(f"   y_clean_numeric_samples.npy (numerico, target valutazione): {y_total_clean_num.shape}")
