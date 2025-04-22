@@ -13,69 +13,67 @@ import time
 import sys
 import errno # Per gestione errori directory
 
-# --- Rilevamento Ambiente e Definizione Percorsi ---
+# --- FLAG PER AMBIENTE ---
+# Imposta a True se stai eseguendo su Google Colab, False se in locale
+RUNNING_ON_COLAB = False # <--- MODIFICA QUESTA RIGA MANUALMENTE
+# -------------------------
 
-# Verifica se siamo in Google Colab
-IN_COLAB = 'google.colab' in sys.modules
+# --- Definizione Percorsi basata sul Flag ---
+if RUNNING_ON_COLAB:
+    print("INFO: Flag RUNNING_ON_COLAB impostato a True.")
+    try:
+        from google.colab import drive
+        if not os.path.exists('/content/drive/MyDrive'):
+             print("INFO: Montaggio Google Drive...")
+             drive.mount('/content/drive', force_remount=True)
+             import time
+             time.sleep(5)
+        else:
+             print("INFO: Google Drive già montato.")
+    except ImportError:
+         print("ERRORE: Impossibile importare google.colab. Assicurati di essere in Colab.")
+         # Potresti voler uscire qui o impostare percorsi di default
+         exit()
 
-if IN_COLAB:
-    print("INFO: Rilevato ambiente Google Colab.")
-    from google.colab import drive
-    # Monta Google Drive se non già montato
-    if not os.path.exists('/content/drive/MyDrive'):
-         print("INFO: Montaggio Google Drive...")
-         drive.mount('/content/drive')
-         # Attendi un attimo per assicurarti che il mount sia completo
-         import time
-         time.sleep(5)
-    else:
-         print("INFO: Google Drive già montato.")
 
-    # Definisci i percorsi base per Colab (ASSUMENDO la tua struttura su Drive)
-    GDRIVE_BASE = "/content/drive/MyDrive/Tesi_ECG_Denoising/" # Modifica se necessario
-    REPO_NAME = "TUO_REPO_NAME" # Il nome della cartella clonata da GitHub
-    PROJECT_ROOT_COLAB = f"/content/{REPO_NAME}/" # Percorso del progetto clonato
+    GDRIVE_BASE = "/content/drive/MyDrive/Tesi_ECG_Denoising/" # <--- Modifica se necessario
+    REPO_NAME = "denoising_ecg"  # <--- Modifica col nome del tuo repo clonato
+    PROJECT_ROOT = f"/content/{REPO_NAME}/" # Percorso del progetto clonato in Colab
 
-    # Percorsi Dati su Drive
-    DATA_DIR_COLAB = os.path.join(GDRIVE_BASE, "data")
-    ECG_DIR = os.path.join(DATA_DIR_COLAB, "mit-bih/")
-    NOISE_DIR = os.path.join(DATA_DIR_COLAB, "noise_stress_test/")
-    NOISY_ECG_DIR = os.path.join(DATA_DIR_COLAB, "noisy_ecg/")
-    SAMPLE_DATA_DIR = os.path.join(DATA_DIR_COLAB, "samplewise/")
-
-    # Percorsi Output Modelli su Drive
-    MODEL_OUTPUT_DIR = os.path.join(GDRIVE_BASE, "models/multi_tm_denoiser/")
-
-    # Percorso per info binarizzazione su Drive
-    BIN_INFO_PATH = os.path.join(SAMPLE_DATA_DIR, "binarization_info.pkl")
-
-    # Assicurati che le directory di output esistano su Drive
-    os.makedirs(MODEL_OUTPUT_DIR, exist_ok=True)
-    # Potrebbe essere necessario creare anche NOISY_ECG_DIR e SAMPLE_DATA_DIR se
-    # esegui anche i preprocessing su Colab la prima volta.
-    os.makedirs(NOISY_ECG_DIR, exist_ok=True)
-    os.makedirs(SAMPLE_DATA_DIR, exist_ok=True)
+    DATA_DIR = os.path.join(GDRIVE_BASE, "data")
+    MODEL_DIR = os.path.join(GDRIVE_BASE, "models")
 
 else:
-    print("INFO: Rilevato ambiente Locale.")
-    # Definisci i percorsi relativi per l'ambiente locale
-    # Assumiamo che lo script sia eseguito dalla root del progetto
-    # o che i percorsi relativi funzionino dalla posizione dello script.
-    # Se esegui da src/, potresti dover usare '../data' etc.
-    PROJECT_ROOT_LOCAL = "." # O specifica il percorso assoluto/relativo corretto
-    DATA_DIR_LOCAL = os.path.join(PROJECT_ROOT_LOCAL, "data")
+    print("INFO: Flag RUNNING_ON_COLAB impostato a False (Ambiente Locale).")
+    # Definisci i percorsi relativi o assoluti per l'ambiente locale
+    # Assumiamo esecuzione dalla root del progetto per semplicità
+    PROJECT_ROOT = "."
+    DATA_DIR = os.path.join(PROJECT_ROOT, "data")
+    MODEL_DIR = os.path.join(PROJECT_ROOT, "models")
 
-    ECG_DIR = os.path.join(DATA_DIR_LOCAL, "mit-bih/")
-    NOISE_DIR = os.path.join(DATA_DIR_LOCAL, "noise_stress_test/")
-    NOISY_ECG_DIR = os.path.join(DATA_DIR_LOCAL, "noisy_ecg/")
-    SAMPLE_DATA_DIR = os.path.join(DATA_DIR_LOCAL, "samplewise/")
-    MODEL_OUTPUT_DIR = os.path.join(PROJECT_ROOT_LOCAL, "models/multi_tm_denoiser/")
-    BIN_INFO_PATH = os.path.join(SAMPLE_DATA_DIR, "binarization_info.pkl")
+# Costruisci percorsi specifici che verranno usati nel resto dello script
+ECG_DIR = os.path.join(DATA_DIR, "mit-bih/")
+NOISE_DIR = os.path.join(DATA_DIR, "noise_stress_test/")
+NOISY_ECG_DIR = os.path.join(DATA_DIR, "noisy_ecg/")
+SAMPLE_DATA_DIR = os.path.join(DATA_DIR, "samplewise/")
+MODEL_OUTPUT_DIR = os.path.join(MODEL_DIR, "multi_tm_denoiser/")
+BIN_INFO_PATH = os.path.join(SAMPLE_DATA_DIR, "binarization_info.pkl")
 
-    # Assicurati che le directory di output esistano localmente
+print(f"INFO: Usando DATA_DIR: {DATA_DIR}")
+print(f"INFO: Usando MODEL_DIR: {MODEL_DIR}")
+
+# Assicurati che le directory di output esistano (necessario crearle
+# sia in locale che su Drive se non esistono già)
+try:
     os.makedirs(MODEL_OUTPUT_DIR, exist_ok=True)
-    os.makedirs(NOISY_ECG_DIR, exist_ok=True) # Se generate_noisy_ecg è separato
-    os.makedirs(SAMPLE_DATA_DIR, exist_ok=True) # Se preprocessing è separato
+    os.makedirs(NOISY_ECG_DIR, exist_ok=True)
+    os.makedirs(SAMPLE_DATA_DIR, exist_ok=True)
+except OSError as e:
+     if e.errno != errno.EEXIST:
+         print(f"⚠️ Attenzione: impossibile creare directory {e.filename}. Assicurati che il percorso base esista.")
+except NameError: # Se errno non è importato
+     pass # Ignora l'errore se non possiamo controllare errno
+
 
 # --- Configurazione ---
 # Parametri Binarizzazione (devono corrispondere a preprocessing)
