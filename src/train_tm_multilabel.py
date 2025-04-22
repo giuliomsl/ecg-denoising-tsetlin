@@ -83,30 +83,29 @@ NUM_OUTPUT_BITS = 7 # (2 mean + 1 grad + 4 quant con n_bins=4) - Verifica coeren
 CONTEXT_K = 10
 
 # Parametri Tsetlin Machine (da passare al manager)
-# Assicurati siano compatibili con la classe TM sottostante (MultiClassTsetlinMachine)
 TM_PARAMS = {
     "number_of_clauses": 1000,
     "T": 800,
     "s": 5.0,
     "number_of_state_bits": 8,
-    "boost_true_positive_feedback": 1, # Comune per binario
-    "indexed": True, # Parametro specifico di MultiClassTsetlinMachine
-    # Aggiungi altri parametri kwargs se necessario (es. weighted_clauses, s_range, etc.)
+    "boost_true_positive_feedback": 1,
+    "indexed": True,
 }
-EPOCHS_PER_LABEL = 10 # Epoche per *ogni* TM binaria interna
-USE_VALIDATION_FOR_BEST_STATE = True # Salva il miglior stato basato su val_acc
-
-# Percorsi
-SAMPLE_DATA_DIR = "data/samplewise/"
-MODEL_OUTPUT_DIR = "models/multi_tm_denoiser/"
-MODEL_FILENAME = "noise_tm_manager.pkl" # Nome file per salvare/caricare il manager
-BIN_INFO_PATH = os.path.join(SAMPLE_DATA_DIR, "binarization_info.pkl")
-MODEL_SAVE_PATH = os.path.join(MODEL_OUTPUT_DIR, MODEL_FILENAME)
+EPOCHS_PER_LABEL = 10
+USE_VALIDATION_FOR_BEST_STATE = True
 
 # Flag per controllare riesecuzione training
-FORCE_RETRAIN = False # Metti a True per forzare nuovo addestramento
+FORCE_RETRAIN = False
 
-# --- Funzione di Decodifica Inversa (invariata) ---
+# --- USA I PERCORSI DEFINITI PRIMA DAL BLOCCO if/else ---
+# Commenta o elimina queste righe:
+# SAMPLE_DATA_DIR = "data/samplewise/" # <--- RIMUOVI/COMMENTA
+# MODEL_OUTPUT_DIR = "models/multi_tm_denoiser/" # <--- RIMUOVI/COMMENTA
+MODEL_FILENAME = "noise_tm_manager.pkl" # Questo va bene, è solo il nome del file
+# BIN_INFO_PATH = os.path.join(SAMPLE_DATA_DIR, "binarization_info.pkl") # <--- RIMUOVI/COMMENTA (già definito prima)
+MODEL_SAVE_PATH = os.path.join(MODEL_OUTPUT_DIR, MODEL_FILENAME) # <--- OK, usa MODEL_OUTPUT_DIR definito prima
+
+# --- Funzione di Decodifica Inversa ---
 def inverse_binarize_combined(y_pred_bin, binarization_info):
     # ... (La tua funzione di decodifica come definita prima) ...
     if binarization_info is None or "bin_edges" not in binarization_info:
