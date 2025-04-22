@@ -15,7 +15,7 @@ import errno # Per gestione errori directory
 
 # --- FLAG PER AMBIENTE ---
 # Imposta a True se stai eseguendo su Google Colab, False se in locale
-RUNNING_ON_COLAB = False # <--- MODIFICA QUESTA RIGA MANUALMENTE
+RUNNING_ON_COLAB = True # <--- MODIFICA QUESTA RIGA MANUALMENTE
 # -------------------------
 
 # --- Definizione Percorsi basata sul Flag ---
