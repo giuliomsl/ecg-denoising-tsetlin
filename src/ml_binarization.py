@@ -59,29 +59,21 @@ def binarize_quantized(signal, n_bins=4, strategy='uniform'):
     bin_edges = est.bin_edges_[0]
     return thermometer, bin_edges # Restituisce anche i bordi per la decodifica
 
-def binarize_quantized_adaptive(signal, n_bins=4):
+def binarize_quantized_adaptive(signal, n_bins): # Rimosso default=4
     """Quantizzazione adattiva (per quantili) con thermometer encoding standard."""
+    if not isinstance(n_bins, int) or n_bins <= 1:
+         raise ValueError("n_bins deve essere un intero maggiore di 1")
     signal = signal.reshape(-1, 1)
     est = KBinsDiscretizer(n_bins=n_bins, encode='ordinal', strategy='quantile', subsample=None)
     quantized = est.fit_transform(signal).astype(int).flatten()
     bin_edges = est.bin_edges_[0]
 
-    # Thermometer encoding standard: bit j è 1 se livello >= j
-    # (Usiamo >= 1, >= 2, ..., >= n_bins-1 per avere n_bins-1 bit, oppure >=0,... per n_bins bit)
-    # Proviamo con n_bins bit: bit j è 1 se livello >= j (j da 0 a n_bins-1)
     thermometer = np.zeros((len(quantized), n_bins), dtype=np.uint8)
     for i in range(len(quantized)):
         level = quantized[i]
         for j in range(n_bins):
             if level >= j:
                 thermometer[i, j] = 1
-    # Esempio n_bins=4:
-    # Livello 0: [1, 0, 0, 0] (>=0)
-    # Livello 1: [1, 1, 0, 0] (>=0, >=1)
-    # Livello 2: [1, 1, 1, 0] (>=0, >=1, >=2)
-    # Livello 3: [1, 1, 1, 1] (>=0, >=1, >=2, >=3)
-
-    # Ora l'ultimo bit (indice 3 qui, indice 6 dopo concat) è 1 solo per il livello più alto.
     return thermometer, bin_edges
 
 def binarize_gradient_window(signal, window_size=10):
@@ -98,36 +90,21 @@ def binarize_gradient_window(signal, window_size=10):
     binary = (trend > 0).astype(np.uint8) # 1 se crescente, 0 se decrescente/stabile
     return binary.reshape(-1, 1)
 
-def binarize_combined(signal, quant_n_bins=4, mean_filt_window=50, grad_window=10):
+def binarize_combined(signal, quant_n_bins, mean_filt_window=50, grad_window=10): # quant_n_bins ora è richiesto
     """
     Combinare diversi metodi di binarizzazione.
-
-    Args:
-        signal (np.ndarray): Segnale numerico 1D.
-        quant_n_bins (int): Numero di bin per la quantizzazione adattiva.
-        mean_filt_window (int): Dimensione finestra per il filtro media mobile.
-        grad_window (int): Dimensione finestra per il calcolo del gradiente.
-
-    Returns:
-        tuple: (np.ndarray, dict):
-            - Matrice binaria combinata (shape: len(signal), n_total_bits).
-            - Dizionario con informazioni ausiliarie (es. bin_edges) per la decodifica.
+    quant_n_bins è ora un argomento richiesto.
     """
-    mean_bin = binarize_mean_filter(signal, window_size=mean_filt_window) # 2 colonne (Bit 0, 1)
-    grad_bin = binarize_gradient_window(signal, window_size=grad_window)  # 1 colonna  (Bit 2)
-    # NOTA: binarize_quantized_adaptive restituisce anche i bin_edges
-    quant_bin, bin_edges = binarize_quantized_adaptive(signal, n_bins=quant_n_bins) # 'quant_n_bins' colonne (Bit 3, 4, ...)
+    mean_bin = binarize_mean_filter(signal, window_size=mean_filt_window) # 2 colonne
+    grad_bin = binarize_gradient_window(signal, window_size=grad_window)  # 1 colonna
+    quant_bin, bin_edges = binarize_quantized_adaptive(signal, n_bins=quant_n_bins) # Usa l'argomento
 
-    # --- Mappatura Bit Esempio (per quant_n_bins=4 -> 3 bit thermometer) ---
-    # Bit 0: Segnale > Media Mobile
-    # Bit 1: Differenza > 0 (Pendenza istantanea positiva)
-    # Bit 2: Trend locale > 0 (Pendenza su finestra 'grad_window')
-    # Bit 3: Livello Quantizzato >= 1 (Thermometer bit 0)
-    # Bit 4: Livello Quantizzato >= 2 (Thermometer bit 1)
-    # Bit 5: Livello Quantizzato >= 3 (Thermometer bit 2)
-    # Totale: 2 + 1 + quant_n_bins = 6 bit (se quant_n_bins=4)
+    # Il numero totale di bit ora è 2 + 1 + quant_n_bins
+    n_total_bits = 2 + 1 + quant_n_bins
+    print(f"DEBUG (binarize_combined): n_bins={quant_n_bins} -> quant_bin shape={quant_bin.shape} -> total bits={n_total_bits}")
 
     combined_binary = np.concatenate((mean_bin, grad_bin, quant_bin), axis=1)
+    # Salva n_bins usato nelle info ausiliarie
     aux_info = {"bin_edges": bin_edges, "n_bins_quant": quant_n_bins}
 
     return combined_binary, aux_info
@@ -156,9 +133,11 @@ def binarize(signal, method="combined", **kwargs):
         ws = kwargs.get('grad_window', 10)
         return binarize_gradient_window(signal, window_size=ws), {}
     elif method == "combined":
-        # Passa i parametri specifici a binarize_combined
+        # Estrai quant_n_bins da kwargs, altrimenti errore perché è richiesto
+        if 'quant_n_bins' not in kwargs:
+             raise ValueError("Argomento 'quant_n_bins' è richiesto per method='combined'")
         return binarize_combined(signal,
-                                 quant_n_bins=kwargs.get('quant_n_bins', 4),
+                                 quant_n_bins=kwargs['quant_n_bins'], # Passa il valore
                                  mean_filt_window=kwargs.get('mean_filt_window', 50),
                                  grad_window=kwargs.get('grad_window', 10))
     else:
