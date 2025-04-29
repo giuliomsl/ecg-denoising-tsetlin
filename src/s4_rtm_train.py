@@ -17,7 +17,7 @@ print("--- RTM Training Script for S4 (Noise Estimation) ---")
 print("--- TUNING LOOP FOR CLAUSES / T ---")
 
 # --- FLAG PER AMBIENTE ---
-RUNNING_ON_COLAB = False
+RUNNING_ON_COLAB = True
 # -------------------------
 
 # --- Definizione Percorsi ---

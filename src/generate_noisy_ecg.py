@@ -10,7 +10,7 @@ import errno
 from tqdm import tqdm
 
 # --- FLAG PER AMBIENTE ---
-RUNNING_ON_COLAB = False
+RUNNING_ON_COLAB = True
 # -------------------------
 
 # --- Definizione Percorsi ---

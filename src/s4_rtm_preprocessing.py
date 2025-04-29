@@ -14,7 +14,7 @@ import traceback
 print("--- RTM Preprocessing Script for S4 (Noise Estimation) ---")
 
 # --- FLAG PER AMBIENTE ---
-RUNNING_ON_COLAB = False
+RUNNING_ON_COLAB = True
 # -------------------------
 
 # --- Definizione Percorsi ---
