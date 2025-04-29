@@ -2,7 +2,7 @@
 import os
 import numpy as np
 import wfdb
-from ml_binarization import binarize, save_binarization_info # Assicurati che save_binarization_info esista
+from s1_ml_binarization import binarize, save_binarization_info # Assicurati che save_binarization_info esista
 import pickle
 import sys
 import errno

@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 import numpy as np
 import pickle
-from ml_tm_class import MultiLabelTsetlinMachine # Usa il tuo wrapper
+from s1_ml_tm_class import MultiLabelTsetlinMachine # Usa il tuo wrapper
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, mean_squared_error, hamming_loss
 from ecg_dataset import ECGSamplewiseDataset
 from ecg_utils import calculate_snr, plot_signal_comparison
-from ml_binarization import load_binarization_info # Funzione per caricare info
+from s1_ml_binarization import load_binarization_info # Funzione per caricare info
 import os
 import time
 import sys
