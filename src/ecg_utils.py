@@ -1,5 +1,26 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy import signal
+
+def bandpass_filter(data, lowcut=0.5, highcut=40, fs=360, order=4):
+    """
+    Applica un filtro passa-banda al segnale ECG.
+    
+    Args:
+        data (np.ndarray): Segnale da filtrare
+        lowcut (float): Frequenza di taglio bassa in Hz
+        highcut (float): Frequenza di taglio alta in Hz  
+        fs (float): Frequenza di campionamento in Hz
+        order (int): Ordine del filtro
+    
+    Returns:
+        np.ndarray: Segnale filtrato
+    """
+    nyquist = 0.5 * fs
+    low = lowcut / nyquist
+    high = highcut / nyquist
+    b, a = signal.butter(order, [low, high], btype='band')
+    return signal.filtfilt(b, a, data)
 
 def calculate_snr(clean_signal, noisy_signal):
     """
@@ -58,3 +79,21 @@ def normalize_signal(signal):
     if max_val - min_val == 0:
         return signal
     return 2 * (signal - min_val) / (max_val - min_val) - 1
+
+
+def thermometer_encode(x, thresholds):
+    """Thermometer encoding: x.shape = (n,), thresholds = sorted list."""
+    return np.array([[int(val <= t) for t in thresholds] for val in x])
+
+def difference_encode(x, thresholds=[-0.1, 0, 0.1]):
+    """Encode differenze x(t) - x(t-1) su base ternaria con soglie."""
+    dx = np.diff(x, prepend=x[0])
+    return np.array([[int(d <= t) for t in thresholds] for d in dx])
+
+def moving_avg_dev(x, window_size=15, thresholds=[-0.1, 0.1]):
+    """Deviazione dal valore medio mobile binarizzata."""
+    pad = window_size // 2
+    padded = np.pad(x, (pad, pad), mode='edge')
+    ma = np.convolve(padded, np.ones(window_size)/window_size, mode='valid')
+    delta = x - ma
+    return np.array([[int(d <= thresholds[0]), int(d >= thresholds[1])] for d in delta])
