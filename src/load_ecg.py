@@ -1,182 +1,178 @@
-# File: load_ecg.py (Aggiornato)
+"""
+File: load_ecg.py
+Description: 
+    This script provides a centralized system for managing file paths and loading 
+    data for the ECG denoising project. It ensures that the project runs 
+    seamlessly in different environments by dynamically configuring paths. It also 
+    includes utility functions to load ECG records and noise signals, and it 
+    handles the creation of necessary output directories.
+"""
 
-import wfdb
 import os
-import matplotlib.pyplot as plt
-import sys # Per sys.exit in caso di errore grave
-import errno
+import wfdb
 import numpy as np
+from sklearn.model_selection import train_test_split
+import errno
+import sys
 
-# --- FLAG PER AMBIENTE ---
-# Imposta a True se stai eseguendo su Google Colab, False se in locale
-RUNNING_ON_COLAB = False # <--- MODIFICA QUESTA RIGA MANUALMENTE
-# -------------------------
-
-# --- Definizione Percorsi basata sul Flag ---
-if RUNNING_ON_COLAB:
-    print("INFO: load_ecg.py - Flag RUNNING_ON_COLAB impostato a True.")
-    try:
-        from google.colab import drive
-        if not os.path.exists('/content/drive/MyDrive'):
-             print("INFO: load_ecg.py - Montaggio Google Drive...")
-             drive.mount('/content/drive', force_remount=True)
-             import time
-             time.sleep(5) # Dai tempo a Drive di montarsi
-        else:
-             print("INFO: load_ecg.py - Google Drive già montato.")
-    except ImportError:
-         print("ERRORE: load_ecg.py - Impossibile importare google.colab. Assicurati di essere in Colab.")
-         sys.exit("Errore critico: ambiente Colab non rilevato come previsto.")
-
-
-    GDRIVE_BASE = "/content/drive/MyDrive/Tesi_ECG_Denoising/" # <--- Modifica se il tuo percorso base su Drive è diverso
-    # Se cloni il repository direttamente in Colab (non da Drive)
-    # REPO_NAME = "denoising_ecg"
-    # PROJECT_ROOT = f"/content/{REPO_NAME}/" # Percorso del progetto clonato in Colab
-    # Altrimenti, se il progetto è su Drive:
-    PROJECT_ROOT = os.path.join(GDRIVE_BASE, "denoising_ecg_project_folder_name") # <--- Modifica col nome della tua cartella progetto su Drive
-
-    DATA_DIR = os.path.join(PROJECT_ROOT, "data") # Assumendo che 'data' sia dentro la cartella del progetto su Drive
-    MODEL_DIR = os.path.join(PROJECT_ROOT, "models")# Assumendo che 'models' sia dentro la cartella del progetto su Drive
-
-else:
-    print("INFO: load_ecg.py - Flag RUNNING_ON_COLAB impostato a False (Ambiente Locale).")
-    # Definisci i percorsi relativi o assoluti per l'ambiente locale
-    # Assumiamo che questo script sia in una sottocartella 'src' e la root del progetto sia un livello sopra.
-    # Se esegui dalla root del progetto, PROJECT_ROOT = "."
-    CURRENT_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-    PROJECT_ROOT = os.path.dirname(CURRENT_SCRIPT_DIR) # Un livello sopra 'src'
-    # Se questo script è già nella root del progetto, allora PROJECT_ROOT = "."
-    # PROJECT_ROOT = "." # Descommenta se esegui dalla root del progetto
-
-    DATA_DIR = os.path.join(PROJECT_ROOT, "data")
-    MODEL_DIR = os.path.join(PROJECT_ROOT, "models")
-
-# Costruisci percorsi specifici che verranno usati nel resto del progetto
-ECG_DIR = os.path.join(DATA_DIR, "mit-bih/")
-NOISE_DIR = os.path.join(DATA_DIR, "noise_stress_test/")
-# NOISY_ECG_DIR = os.path.join(DATA_DIR, "noisy_ecg/") # Potrebbe non essere più usato direttamente se generi segmenti
-SEGMENTED_SIGNAL_DIR = os.path.join(DATA_DIR, "segmented_signals") # Output di generate_noisy_ecg.py
-SAMPLE_DATA_DIR = os.path.join(DATA_DIR, "samplewise") # Output di s5_rtm_preprocessing.py
-MODEL_OUTPUT_DIR = os.path.join(MODEL_DIR, "rtm_denoiser") # Output di s6_rtm_train.py
-
-# Nome file per la mappa delle soglie RTM (usato da s5_preprocessing e s6_train)
-# Il nome effettivo del file includerà il numero di quantili, gestito in s5_preprocessing.
-# Questo è solo il percorso della directory e un nome base.
-RTM_THRESHOLD_MAP_BASE_FILENAME = "rtm_threshold_map" # Il suffisso _q<N>.pkl verrà aggiunto
-RTM_THRESHOLD_MAP_DIR = SAMPLE_DATA_DIR # Le mappe soglie vanno con i dati campionati
-
-print(f"INFO: load_ecg.py - PROJECT_ROOT: {PROJECT_ROOT}")
-print(f"INFO: load_ecg.py - DATA_DIR: {DATA_DIR}")
-print(f"INFO: load_ecg.py - MODEL_DIR: {MODEL_DIR}")
-print(f"INFO: load_ecg.py - SEGMENTED_SIGNAL_DIR: {SEGMENTED_SIGNAL_DIR}")
-print(f"INFO: load_ecg.py - SAMPLE_DATA_DIR: {SAMPLE_DATA_DIR}")
-print(f"INFO: load_ecg.py - MODEL_OUTPUT_DIR: {MODEL_OUTPUT_DIR}")
-print(f"INFO: load_ecg.py - RTM_THRESHOLD_MAP_DIR: {RTM_THRESHOLD_MAP_DIR}")
-
-
-# Assicurati che le directory di output principali esistano
-# Altre directory specifiche verranno create dagli script che le usano.
+# --- Project Directory Setup ---
+# This setup assumes the script is in a 'src' folder, and navigates up to the project root.
+# This makes the script runnable from any location within the project structure.
 try:
-    os.makedirs(DATA_DIR, exist_ok=True)
-    os.makedirs(MODEL_DIR, exist_ok=True)
-    os.makedirs(SEGMENTED_SIGNAL_DIR, exist_ok=True)
-    os.makedirs(SAMPLE_DATA_DIR, exist_ok=True)
-    os.makedirs(MODEL_OUTPUT_DIR, exist_ok=True)
-except OSError as e:
-     if e.errno != errno.EEXIST:
-         print(f"⚠️  ATTENZIONE: load_ecg.py - Impossibile creare directory {e.filename}. "
-               "Assicurati che i percorsi base siano accessibili e scrivibili.")
+    PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 except NameError:
-     pass
+    # Fallback for interactive environments (like Jupyter) where __file__ is not defined.
+    PROJECT_ROOT = os.path.abspath('.')
+    print(f"Warning: __file__ not defined. Assuming project root is the current directory: {PROJECT_ROOT}")
 
-def list_records(ecg_database_dir=ECG_DIR):
-    """Restituisce una lista di tutti i record disponibili nel dataset MIT-BIH."""
+# --- Core Data and Model Directories ---
+# Define key directories relative to the project root for consistency.
+DATA_DIR = os.path.join(PROJECT_ROOT, 'data')
+MODEL_DIR = os.path.join(PROJECT_ROOT, 'models')
+
+# --- Derived Project Paths ---
+# These paths are constructed from the base directories and are used project-wide.
+
+# Source data directories
+MIT_BIH_DIR = os.path.join(DATA_DIR, "mit-bih/")              # MIT-BIH Arrhythmia Database
+NOISE_DIR = os.path.join(DATA_DIR, "noise_stress_test/")  # MIT-BIH Noise Stress Test Database
+
+# Directories for generated/processed data
+GENERATED_SIGNAL_DIR = os.path.join(DATA_DIR, 'generated_signals') # For signals with synthetic noise
+SEGMENTED_SIGNAL_DIR = os.path.join(DATA_DIR, "segmented_signals")  # Output of generate_noisy_ecg.py
+SAMPLE_DATA_DIR = os.path.join(DATA_DIR, "samplewise")             # Output of s5_rtm_preprocessing.py
+MODEL_OUTPUT_DIR = os.path.join(MODEL_DIR, "rtm_denoiser")          # Output of training scripts
+
+# --- Global Constants ---
+SAMPLE_RATE = 360  # Sampling rate for the MIT-BIH dataset in Hz.
+
+# --- Directory Creation ---
+# Ensures that all necessary output directories exist.
+def create_directories():
+    """
+    Creates all necessary output directories if they do not already exist.
+    """
+    dirs_to_create = [
+        DATA_DIR,
+        MODEL_DIR,
+        GENERATED_SIGNAL_DIR,
+        SEGMENTED_SIGNAL_DIR,
+        SAMPLE_DATA_DIR,
+        MODEL_OUTPUT_DIR
+    ]
+    for d in dirs_to_create:
+        try:
+            os.makedirs(d, exist_ok=True)
+        except OSError as e:
+            # A simple check to avoid crashing if the directory already exists.
+            if e.errno != errno.EEXIST:
+                print(f"ERROR: Could not create directory {d}. Reason: {e}")
+                sys.exit(1) # Exit if a critical directory cannot be created.
+
+# --- Data Loading Utilities ---
+
+def load_mit_bih_records(data_dir=MIT_BIH_DIR):
+    """
+    Loads all unique MIT-BIH record names from the specified directory.
+
+    It scans the directory for files with the '.dat' extension and extracts
+    the base name of each record.
+
+    Args:
+        data_dir (str): The path to the directory containing MIT-BIH files.
+
+    Returns:
+        list: A sorted list of unique record names (e.g., ['100', '101']).
+    """
     try:
-        files = [f.split(".")[0] for f in os.listdir(ecg_database_dir) if f.endswith(".dat")]
-        return sorted(list(set(files)))
+        record_files = [f for f in os.listdir(data_dir) if f.endswith('.dat')]
+        record_names = sorted(list(set([f.split('.')[0] for f in record_files])))
+        print(f"Found {len(record_names)} unique records in '{data_dir}'.")
+        return record_names
     except FileNotFoundError:
-        print(f"❌ ERRORE: load_ecg.py - La directory ECG '{ecg_database_dir}' non è stata trovata.")
-        return []
-    except Exception as e:
-        print(f"❌ ERRORE: load_ecg.py - Errore durante la lettura di '{ecg_database_dir}': {e}")
+        print(f"ERROR: Data directory not found at '{data_dir}'. Please check the path.")
         return []
 
-def load_ecg_record(record_name, ecg_database_dir=ECG_DIR):
-    """Carica un record ECG e le sue annotazioni dal MIT-BIH."""
-    record_path_base = os.path.join(ecg_database_dir, record_name)
+def get_train_test_split(test_size=0.3, validation_size=0.2, random_state=42, data_dir=MIT_BIH_DIR):
+    """
+    Splits the available MIT-BIH records into training, validation, and test sets.
+
+    Args:
+        test_size (float): The proportion of the dataset to allocate to the test set.
+        validation_size (float): The proportion of the *training* set to allocate to the validation set.
+        random_state (int): The seed for the random number generator for reproducibility.
+        data_dir (str): The directory to scan for records.
+
+    Returns:
+        tuple: A tuple containing three lists of record names: (train_ids, val_ids, test_ids).
+    """
+    all_records = load_mit_bih_records(data_dir)
+    if not all_records:
+        return [], [], [] # Return empty lists if no records were found
+
+    # Split into initial training set and test set
+    train_val_ids, test_ids = train_test_split(
+        all_records, 
+        test_size=test_size, 
+        random_state=random_state
+    )
+    
+    # Split the initial training set into final training and validation sets
+    train_ids, val_ids = train_test_split(
+        train_val_ids,
+        test_size=validation_size,
+        random_state=random_state
+    )
+    
+    print(f"Data split: {len(train_ids)} training, {len(val_ids)} validation, {len(test_ids)} test records.")
+    return train_ids, val_ids, test_ids
+
+def load_ecg_signal(record_name, data_dir=MIT_BIH_DIR, channel=0):
+    """
+    Loads a single-channel ECG signal from a specified MIT-BIH record.
+
+    Args:
+        record_name (str): The name of the record to load (e.g., '100').
+        data_dir (str): The directory where the record files are located.
+        channel (int): The channel index to extract from the record.
+
+    Returns:
+        np.array: A 1D NumPy array containing the ECG signal data.
+                  Returns None if the record cannot be loaded.
+    """
+    record_path = os.path.join(data_dir, record_name)
     try:
-        record = wfdb.rdrecord(record_path_base)
-        annotations = wfdb.rdann(record_path_base, "atr") # Annotazioni di default 'atr'
-        return record, annotations
-    except FileNotFoundError:
-        print(f"❌ ERRORE: load_ecg.py - File per il record '{record_name}' non trovati in '{ecg_database_dir}'.")
-        print(f"   Verifica che esistano {record_name}.dat, {record_name}.hea, e {record_name}.atr")
-        return None, None
+        record = wfdb.rdrecord(record_path)
+        signal = record.p_signal[:, channel]
+        return signal
     except Exception as e:
-        print(f"❌ ERRORE: load_ecg.py - Durante il caricamento del record '{record_name}': {e}")
-        return None, None
+        print(f"Error loading record {record_name}: {e}")
+        return None
 
-def plot_ecg_segment(record_name, start_sec=0, duration_sec=10, ecg_database_dir=ECG_DIR):
-    """Plotta un segmento del segnale ECG con le annotazioni."""
-    record, annotations = load_ecg_record(record_name, ecg_database_dir)
-    if record is None:
-        return
+# --- Main Execution Block ---
+if __name__ == '__main__':
+    print("--- ECG Data Loading and Path Utility ---")
+    
+    # Create directories first
+    create_directories()
+    
+    print(f"Project Root: {PROJECT_ROOT}")
+    print(f"MIT-BIH Data Directory: {MIT_BIH_DIR}")
+    
+    # Demonstrate loading record names
+    record_names = load_mit_bih_records()
+    if record_names:
+        print(f"First 5 records: {record_names[:5]}")
 
-    # Assumiamo che il primo canale (indice 0) sia quello di interesse
-    if record.p_signal.ndim > 1:
-        signal = record.p_signal[:, 0]
-    else:
-        signal = record.p_signal
+    # Demonstrate train-test split
+    train, val, test = get_train_test_split()
+    if train:
+        print(f"Sample Train IDs: {train[:3]}")
+        print(f"Sample Validation IDs: {val[:3]}")
+        print(f"Sample Test IDs: {test[:3]}")
 
-    fs = record.fs
-
-    start_sample = int(start_sec * fs)
-    end_sample = int((start_sec + duration_sec) * fs)
-
-    if end_sample > len(signal):
-        end_sample = len(signal)
-    if start_sample >= end_sample:
-        print("ERRORE: load_ecg.py - Intervallo di start/duration non valido.")
-        return
-
-    segment = signal[start_sample:end_sample]
-    time_axis = np.arange(len(segment)) / fs + start_sec
-
-    beat_locs_samples = [s for s in annotations.sample if start_sample <= s < end_sample]
-    # beat_labels = [annotations.symbol[i] for i, s in enumerate(annotations.sample) if start_sample <= s < end_sample]
-    beat_locs_time = [(s - start_sample) / fs for s in beat_locs_samples]
-
-
-    plt.figure(figsize=(15, 5)) # Aumentata dimensione per leggibilità
-    plt.plot(time_axis, segment, label=f"ECG Lead (Canale 0)", color='blue')
-    if beat_locs_time:
-        plt.scatter([t + start_sec for t in beat_locs_time], # Aggiusta per l'asse temporale corretto
-                    [segment[s_idx] for s_idx in range(len(segment)) if (start_sample + s_idx) in beat_locs_samples], # Modo più sicuro per ottenere ampiezze
-                    color='red', marker='x', label="Battiti Annotati")
-
-    plt.xlabel(f"Tempo (s) - Inizio da {start_sec}s")
-    plt.ylabel("Ampiezza (mV)") # Assumendo mV, verifica unità da .hea
-    plt.title(f"ECG Record {record_name} (Finestra: {start_sec}-{start_sec + duration_sec}s)")
-    plt.legend()
-    plt.grid(True)
-    plt.tight_layout()
-    plt.show()
-
-if __name__ == "__main__":
-    print("\n--- Test di load_ecg.py ---")
-    available_records = list_records()
-    if available_records:
-        print(f"Record disponibili ({len(available_records)}): {available_records[:5]}...") # Mostra solo i primi 5
-        # Plotta un segmento del primo record disponibile
-        plot_ecg_segment(available_records[0], start_sec=10, duration_sec=5)
-    else:
-        print("Nessun record trovato. Verifica il percorso ECG_DIR.")
-
-    print(f"\nVerifica percorsi definiti:")
-    print(f"  ECG_DIR: {ECG_DIR} (Esiste: {os.path.exists(ECG_DIR)})")
-    print(f"  NOISE_DIR: {NOISE_DIR} (Esiste: {os.path.exists(NOISE_DIR)})")
-    print(f"  SEGMENTED_SIGNAL_DIR: {SEGMENTED_SIGNAL_DIR} (Esiste: {os.path.exists(SEGMENTED_SIGNAL_DIR)})")
-    print(f"  SAMPLE_DATA_DIR: {SAMPLE_DATA_DIR} (Esiste: {os.path.exists(SAMPLE_DATA_DIR)})")
-    print(f"  MODEL_OUTPUT_DIR: {MODEL_OUTPUT_DIR} (Esiste: {os.path.exists(MODEL_OUTPUT_DIR)})")
-    # Il file specifico della mappa delle soglie verrà creato da s5_preprocessing
+    # Demonstrate loading a single signal
+    if record_names:
+        sample_signal = load_ecg_signal(record_names[0])
+        if sample_signal is not None:
+            print(f"Successfully loaded signal '{record_names[0]}' with length: {len(sample_signal)}")

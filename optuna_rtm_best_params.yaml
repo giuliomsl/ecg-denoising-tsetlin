@@ -1,5 +1,5 @@
-T: 4758
-boost_true_positive_feedback: 1
+T: 2750
+boost_true_positive_feedback: 2
 num_quantiles_for_data: 20
-number_of_clauses: 9426
-s: 3.0129105519329604
+number_of_clauses: 8000
+s: 4.0

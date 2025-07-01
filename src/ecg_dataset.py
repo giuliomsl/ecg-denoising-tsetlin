@@ -4,7 +4,7 @@ import numpy as np
 class ECGDenoisingDataset:
     def __init__(self, processed_dir="data/processed/", record_ids=None):
         """
-        Carica i dati preprocessati binarizzati (noisy e clean).
+        Loads the preprocessed binned data (noisy and clean).
         """
         self.processed_dir = processed_dir
         self.record_ids = record_ids or self._detect_available_records()
@@ -31,19 +31,19 @@ class ECGDenoisingDataset:
                 X_noisy_list.append(X_noisy)
                 X_clean_list.append(X_clean)
             else:
-                print(f"⚠️ File mancanti per record {rid}, ignorato.")
+                print(f"⚠️ Missing files for record {rid}, ignored.")
 
         return np.concatenate(X_noisy_list), np.concatenate(X_clean_list)
 
     def get_data(self):
-        """Restituisce (X_noisy, X_clean) come tuple"""
+        """Returns (X_noisy, X_clean) as a tuple"""
         return self.X_noisy, self.X_clean
 
     def summary(self):
-        print("✅ Dataset caricato")
-        print(f"Record usati: {self.record_ids}")
-        print(f"Forma X_noisy: {self.X_noisy.shape}")
-        print(f"Forma X_clean: {self.X_clean.shape}")
+        print("✅ Dataset loaded")
+        print(f"Records used: {self.record_ids}")
+        print(f"Shape X_noisy: {self.X_noisy.shape}")
+        print(f"Shape X_clean: {self.X_clean.shape}")
 
 
 class ECGSamplewiseDataset:
@@ -52,7 +52,7 @@ class ECGSamplewiseDataset:
         self.y_path = os.path.join(sample_dir, "y_train_samples.npy")
 
         if not os.path.exists(self.X_path) or not os.path.exists(self.y_path):
-            raise FileNotFoundError("⚠️ File campionati non trovati. Esegui prima il preprocessing.")
+            raise FileNotFoundError("⚠️ Sample files not found. Please run preprocessing first.")
 
         self.X = np.load(self.X_path)
         self.y = np.load(self.y_path)
@@ -61,6 +61,6 @@ class ECGSamplewiseDataset:
         return self.X, self.y
 
     def summary(self):
-        print("✅ Dataset sample-wise caricato.")
+        print("✅ Sample-wise dataset loaded.")
         print(f"X shape: {self.X.shape}")
         print(f"y shape: {self.y.shape}")
