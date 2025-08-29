@@ -44,6 +44,14 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
+/archivio
+/colab_scripts
+/config
+/docs
+/plots
+/results
+/scripts
+/venv311
 
 # ...
 
