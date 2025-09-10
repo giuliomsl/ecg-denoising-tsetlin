@@ -22,7 +22,7 @@ Key features:
   - Safe model pickling (best-epoch snapshot if supported)
 
 
-Come usare:
+Example:
 
 python src/classifier/train_ctm_classifier.py \
   --h5 ./data/bin/classifier_patches.h5 \
