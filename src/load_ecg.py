@@ -1,18 +1,18 @@
 # ============================================
 # File: load_ecg.py
-# Pipeline step: (source) -> data_generator
+# Pipeline step: (source) -> data_generator 
 # ============================================
 """
 Loader minimale e robusto per MIT-BIH.
 Fornisce `iter_clean_records(mitdb_dir)` che restituisce (record_id:str, fs:int, signal:np.ndarray float32).
 Non applica filtri né normalizzazioni: il data generator farà z-score per finestra e, se serve, il resampling a 360 Hz.
-
-Per semplicità **non** usiamo `config.py`: i percorsi si passano come argomenti agli script successivi.
 """
 from __future__ import annotations
 import os
 import argparse
 from typing import Iterable, Tuple
+from pathlib import Path
+import random
 
 import numpy as np
 
@@ -21,7 +21,53 @@ try:
 except Exception as e:
     wfdb = None
 
-__all__ = ["iter_clean_records", "list_record_bases"]
+ROOT = Path(__file__).resolve().parents[1]
+MIT_BIH_DIR = str(ROOT / "data" / "mit-bih")
+NOISE_DIR = str(ROOT / "data" / "noise_stress_test")
+SEGMENTED_SIGNAL_DIR = str(ROOT / "data" / "segmented_signals")
+
+def create_directories():
+    """Crea le cartelle necessarie per la generazione dei segmenti."""
+    base = Path(SEGMENTED_SIGNAL_DIR)
+    for split in ("train", "validation", "test"):
+        (base / split).mkdir(parents=True, exist_ok=True)
+        # cartelle per modalità folders del consolidatore
+        (base / split / "noisy").mkdir(parents=True, exist_ok=True)
+        (base / split / "clean").mkdir(parents=True, exist_ok=True)
+    (base / "metadata").mkdir(parents=True, exist_ok=True)
+
+def get_train_test_split():
+    """Restituisce (train_records, val_records, test_records) come nomi base MIT-BIH.
+
+    Split deterministico 70/15/15 sugli `.hea` trovati in MIT_BIH_DIR.
+    """
+    bases = list_record_bases(MIT_BIH_DIR)
+    # Considera solo i record MIT-BIH numerici (es. '100', '116', ...)
+    recs = [os.path.basename(b) for b in bases if os.path.basename(b).isdigit()]
+    # dedup e ordinamento per stabilità
+    recs = sorted(set(recs))
+    # shuffle deterministico per evitare bias di ordinamento
+    rng = random.Random(42)
+    rng.shuffle(recs)
+    n = len(recs)
+    if n == 0:
+        return [], [], []
+    i_tr = int(round(n * 0.70))
+    i_val = i_tr + int(round(n * 0.15))
+    train = recs[:i_tr]
+    val = recs[i_tr:i_val]
+    test = recs[i_val:]
+    return train, val, test
+
+__all__ = [
+    "iter_clean_records",
+    "list_record_bases",
+    "MIT_BIH_DIR",
+    "NOISE_DIR",
+    "SEGMENTED_SIGNAL_DIR",
+    "create_directories",
+    "get_train_test_split",
+]
 
 
 def list_record_bases(mitdb_dir: str) -> list[str]:

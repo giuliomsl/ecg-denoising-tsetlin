@@ -7,7 +7,7 @@ ECG Noise Classifier - Data Generator
 Genera dataset HDF5 "raw" per la classificazione del rumore ECG:
   classi: {0:CLEAN, 1:BW, 2:MA, 3:PLI, 4:MIXED (>=2 rumori)}
 
-Obiettivi:
+Punkti chiave:
 - Split per record (niente leakage)
 - Bilanciamento per classe e per record
 - Finestre distanziate (min_spacing) per ridurre duplicati
@@ -242,9 +242,11 @@ def build_split(
     seed: int,
     bw_track: np.ndarray,
     ma_track: np.ndarray,
+    allowed_classes: List[int] = None,
 ):
     rng = np.random.default_rng(seed + hash(split_name) % 1000003)
-    classes = [0,1,2,3,4]  # CLEAN,BW,MA,PLI,MIXED
+    classes = [0,1,2,3,4] if allowed_classes is None else [int(c) for c in allowed_classes]
+    classes = [c for c in classes if c in (0,1,2,3,4)]  # sanitize
     fs = TARGET_FS
 
     # prealloc
@@ -267,7 +269,7 @@ def build_split(
         # start non troppo vicini tra loro
         starts = spaced_starts(len(sig), L, min_spacing, per_record_per_class, rng)
 
-        for cls in classes:
+    for cls in classes:
             for s0 in starts:
                 clean = zscore(sig[s0:s0+L])
                 present = np.zeros(3, dtype=np.int32)
@@ -316,6 +318,7 @@ def build_split(
 
     out_group.attrs['fs'] = float(fs)
     out_group.attrs['n_samples'] = int(wptr)
+    out_group.attrs['allowed_classes'] = json.dumps({int(c): CLASS_MAP[int(c)] for c in classes})
 
 # --------------- Main ----------------
 
@@ -337,6 +340,10 @@ def main():
     ap.add_argument('--contam_margin_db', type=float, default=12.0)
     ap.add_argument('--overlap', type=float, default=0.5, help='Per la distanza minima tra finestre: min_spacing = L*(1-overlap)')
     ap.add_argument('--seed', type=int, default=123)
+    # Nuove opzioni: escludi MIXED per split
+    ap.add_argument('--train_exclude_mixed', action='store_true')
+    ap.add_argument('--val_exclude_mixed', action='store_true')
+    ap.add_argument('--test_exclude_mixed', action='store_true')
     args = ap.parse_args()
 
     if not _WFDB_OK:
@@ -384,6 +391,12 @@ def main():
         for name in ('train','val','test'):
             print(f"[BUILD] split={name} | #records={len(splits[name])}")
             grp = h5.create_group(name)
+            if name == 'train':
+                allowed = [0,1,2,3] if args.train_exclude_mixed else [0,1,2,3,4]
+            elif name == 'val':
+                allowed = [0,1,2,3] if args.val_exclude_mixed else [0,1,2,3,4]
+            else:
+                allowed = [0,1,2,3] if args.test_exclude_mixed else [0,1,2,3,4]
             build_split(
                 name, splits[name], args.mit_dir, grp,
                 L=args.L,
@@ -396,6 +409,7 @@ def main():
                 min_spacing=min_spacing,
                 seed=args.seed,
                 bw_track=bw_track, ma_track=ma_track,
+                allowed_classes=allowed,
             )
         print("Wrote:", args.out)
 

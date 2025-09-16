@@ -38,6 +38,7 @@ from __future__ import annotations
 import os
 import json
 import time
+import math
 import argparse
 import importlib
 import pickle
@@ -46,6 +47,7 @@ from typing import Tuple, Optional, Dict
 
 import numpy as np
 import h5py
+from tqdm import tqdm
 from sklearn.metrics import accuracy_score, f1_score, confusion_matrix, classification_report
 
 # Limit thread oversubscription (important on BLAS-linked environments)
@@ -274,11 +276,13 @@ def main():
 
     for epoch in range(1, args.epochs + 1):
         t0 = time.time()
+        print(f"[EPOCH {epoch:03d}] training on {N} samples (batch={args.batch_size})...")
         perm = np.random.permutation(N)
         Xtr = Xtr[perm]; ytr = ytr[perm]
 
-        # streaming batches
-        for i in range(0, N, args.batch_size):
+        # streaming batches with progress bar
+        total_batches = math.ceil(N / args.batch_size)
+        for i in tqdm(range(0, N, args.batch_size), total=total_batches, desc=f"E{epoch:03d} train", leave=False):
             xs = Xtr[i:i + args.batch_size]
             ys = ytr[i:i + args.batch_size]
             ys_u32 = np.asarray(ys, dtype=np.uint32)  # TMU requires uint32; harmless for pyTM

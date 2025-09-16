@@ -70,27 +70,42 @@ TRAINING_PARAMS = {
 # ===================================================================
 
 # --- 5. PARAMETRI DI PREPROCESSING (per CTM) ---
-# Usati da `preprocess_ctm_classifier.py`
+# Usati da `preprocess_ctm_classifier.py` e variante multicanale
 # -------------------------------------------------------------------
 CLASSIFIER_PREPROC_PARAMS = {
-    # Numero di "livelli" o "pixel verticali" per rappresentare l'ampiezza.
-    # Un valore più alto dà più risoluzione ma aumenta la dimensione dei dati.
-    'amplitude_bins': 64,
+    # Binning per canali morfologici
+    'amplitude_bins': 48,
+    'derivative_bins': 24,
+    'second_derivative_bins': 12,
+    'rms_bins': 12,
+    # Bande spettrali (Hz) per STFT: lista di tuple (f1,f2)
+    'spectral_bands': [
+        (0.1, 0.7),   # very low (BW)
+        (0.7, 3.0),   # low
+        (3.0, 15.0),  # mid (ECG)
+        (45.0, 55.0), # PLI 50Hz
+        (55.0, 65.0), # PLI alias
+    ],
+    'spectral_bins': 6,
     # Pooling temporale per ridurre L e la memoria: 1 = nessun pooling, 2 = dimezza L
-    # NB: nella pipeline attuale il valore è letto da variabile d'ambiente (CTM_CLS_TEMPORAL_POOL),
-    # questo campo è la raccomandazione di default per coerenza documentale.
-    'temporal_pool': 2
+    'temporal_pool': 4,
+    # Finestra RMS in millisecondi
+    'rms_win_ms': 40.0,
 }
 
 # --- 6. IPERPARAMETRI DEL MODELLO (per CTM) ---
-# Usati da `train_ctm_classifier.py`
+# Usati da `train_ctm_classifier.py` e variante multicanale
 # -------------------------------------------------------------------
 CLASSIFIER_MODEL_PARAMS = {
     # PROFILO BASELINE PER CPU (equilibrio qualità/tempo; aumentare per risultati migliori)
-    'number_of_clauses': 800,
-    'T': 400,
-    's': 3.0,
-    'patch_dim': (4, 4)
+    'number_of_clauses': 2000,
+    'T': 900,
+    's': 5.0,
+    # patch_dim: (H, W). H sarà impostato dinamicamente dal preprocess; qui usiamo solo W
+    'patch_w': 31,
+    'patch_h': 64,
+    # batch size consigliato (può essere sovrascritto dagli script)
+    'batch_size': 1024
 }
 
 # --- 7. CONFIGURAZIONE PIPELINE CTM CLASSIFIER ---
@@ -99,7 +114,21 @@ CLASSIFIER_MODEL_PARAMS = {
 CLASSIFIER_PIPELINE_PARAMS = {
     'preprocessor': CLASSIFIER_PREPROC_PARAMS,
     'trainer': {
-        'model': CLASSIFIER_MODEL_PARAMS
+        'model': CLASSIFIER_MODEL_PARAMS,
+    'epochs': 25,
+    'patience': 6,
+        'val_eval_each': 1,
+        'smoothing': {
+            'enabled': True,
+            'window': 3
+        }
+    },
+    'class_mapping': {
+        'CLEAN': 0,
+        'BW_Dominant': 1,
+        'MA_Dominant': 2,
+        'PLI_Dominant': 3,
+        'Mixed_Noise': 4
     }
 }
 
