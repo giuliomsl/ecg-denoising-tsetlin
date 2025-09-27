@@ -119,20 +119,35 @@ def apply_prefilters(x, fs, cfg):
 
 def load_model(stem: Path, clauses=None, T=None, s=None):
     from pyTsetlinMachine.tm import RegressionTsetlinMachine
-    state_npz = stem.with_suffix(".state.npz")
+    state_npz = stem.with_suffix(".state.npz"); state_pkl = stem.with_suffix(".state.pkl")
     meta_json = stem.with_suffix(".meta.json")
-    if state_npz.exists() and meta_json.exists():
+    if meta_json.exists() and (state_npz.exists() or state_pkl.exists()):
         meta = json.loads(meta_json.read_text())
-        if meta.get("format") != "state":
-            raise RuntimeError("Meta non indica 'state'.")
+        fmt = meta.get("format", "state_npz")
         c = int(meta.get("clauses") if clauses is None else clauses)
         TT = int(meta.get("T") if T is None else T)
         ss = float(meta.get("s") if s is None else s)
         model = RegressionTsetlinMachine(c, TT, ss)
         if not hasattr(model, "set_state"):
             raise RuntimeError("pyTsetlinMachine non ha set_state(). Aggiorna.")
-        data = dict(np.load(str(state_npz)))
-        model.set_state(data)
+        
+        # Supporta diversi formati: state con state_format (nuovo) o legacy state_npz/state_pkl
+        if (fmt == "state" and state_npz.exists()) or (fmt == "state_npz" and state_npz.exists()):
+            data = dict(np.load(str(state_npz)))
+            # Handle sequence format (s0, s1, ...) -> list
+            if meta.get("state_format") == "sequence":
+                state_len = meta.get("state_len", len(data))
+                state_list = [data[f"s{i}"] for i in range(state_len)]
+                model.set_state(state_list)
+            else:
+                # Mapping format
+                model.set_state(data)
+        elif (fmt == "state" and state_pkl.exists()) or (fmt == "state_pkl" and state_pkl.exists()):
+            import joblib
+            data = joblib.load(str(state_pkl))
+            model.set_state(data)
+        else:
+            raise RuntimeError("Formato stato non supportato o file mancante.")
         return model
     rtm_file = stem.with_suffix(".rtm")
     if rtm_file.exists() and meta_json.exists():
