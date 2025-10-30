@@ -1,66 +1,171 @@
+# ============================================================================
+# GITIGNORE OTTIMIZZATO: Include SOLO la Pipeline V7 Essenziale
+# ============================================================================
+# Strategia: Ignora tutto (*) e poi usa negative patterns (!) per includere
+# solo i file necessari alla pipeline completa V7
+# ============================================================================
+
+# IGNORA TUTTO di default
+*
+!*/
+
+# ============================================================================
+# FASE 1: PREPARAZIONE DATI
+# ============================================================================
+# File sorgenti Python essenziali
+!src/
+!src/load_ecg.py
+!src/generate_noisy_ecg.py
+
+# ============================================================================
+# FASE 2: FEATURE EXTRACTION
+# ============================================================================
+!src/explain/
+!src/explain/__init__.py
+!src/explain/features.py
+!src/explain/advanced_features.py
+!src/explain/prepare_and_build_explain_dataset_v2.py
+
+# ============================================================================
+# FASE 3: FEATURE SELECTION (V7 & V7b)
+# ============================================================================
+!create_v7_dataset.py
+!src/create_v7b_union_dataset.py
+!analyze_bitplane_importance.py
+
+# ============================================================================
+# FASE 4: TRAINING
+# ============================================================================
+!train_tmu_v7.py
+!grid_search_v7_hyperparams.py
+
+# ============================================================================
+# FASE 5: INFERENCE & CALIBRATION
+# ============================================================================
+!inference_v7.py
+!analyze_v7_calibration.py
+!test_v7_optimized.py
+
+# ============================================================================
+# FASE 6: EVALUATION
+# ============================================================================
+!evaluate_v7.py
+!analyze_grid_search.py
+
+# ============================================================================
+# FASE 7: EXPLAINABILITY
+# ============================================================================
+!complete_explainability_analysis.py
+!explain_v7_complete.py
+!explain_feature_importance.py
+!explain_rules_extraction.py
+!explain_weights_simple.py
+!analyze_v7_rules.py
+
+# ============================================================================
+# FASE 8: VISUALIZATION
+# ============================================================================
+!visualize_explainability_features_v7.py
+!visualize_v7_rules.py
+!visualize_denoising_with_explainability.py
+
+# ============================================================================
+# DOCUMENTAZIONE & CONFIGURAZIONE
+# ============================================================================
+!README.md
+!FINAL_PROJECT_REPORT_IT.md
+!requirements.txt
+!.gitignore
+
+# ============================================================================
+# DATI: Include solo dataset summary e configurazioni
+# ============================================================================
+!data/
+!data/*.json
+!data/train_index.json
+
+# Escludi file grandi (HDF5, NPY)
+data/*.h5
+data/*.npy
+
+# ============================================================================
+# RISULTATI: Include solo JSON e file leggeri
+# ============================================================================
+!results/
+!results/**/*.json
+!results/**/*.txt
+!results/**/*.csv
+
+# Escludi predizioni pesanti (NPZ)
+results/**/*.npz
+results/**/*.pkl
+
+# ============================================================================
+# PLOTS: Include README ma escludi immagini (troppo pesanti)
+# ============================================================================
+!plots/
+!plots/README.md
+plots/**/*.png
+plots/**/*.jpg
+plots/**/*.pdf
+
+# ============================================================================
+# MODELLI: Escludi (troppo pesanti, riproducibili da training)
+# ============================================================================
+models/
+
+# ============================================================================
+# LOGS: Escludi (generati da training)
+# ============================================================================
+logs/
+
+# ============================================================================
+# CARTELLE ARCHIVIATE/SANDBOX: Escludi completamente
+# ============================================================================
+archivio/
+colab_scripts/
+notebooks/
+sandbox_models/
+sandbox_retrain_models/
+RTM_EXPLAIN_PYTSETLIN/
+scripts/
+config/
+docs/
+
+# ============================================================================
+# AMBIENTE PYTHON: Escludi
+# ============================================================================
 venv/
+venv311/
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
-data/
-logs/
-models/
-mit-bih/
-noise_stress_test/
-noisy_ecg/
-generated/
-notebooks/
-*.npy
-*.dat
-*.atr
-*.hea
-*.xws
-*.pkl
-
-# Byte-compiled / optimized / DLL files
 *.py[cod]
 *$py.class
-
-# C extensions
 *.so
-
-# Distribution / packaging
 .Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-share/python-wheels/
 *.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
-/archivio
-/colab_scripts
-/config
-/docs
-/plots
-/results
-/scripts
-/venv311
+.eggs/
+dist/
+build/
 
-# ...
-
-# Ruff stuff:
+# ============================================================================
+# IDE & SISTEMA: Escludi
+# ============================================================================
+.vscode/
+.idea/
+.DS_Store
+*.swp
+*.swo
+*~
 .ruff_cache/
 
-# PyPI configuration file
+# ============================================================================
+# FILE TEMPORANEI: Escludi
+# ============================================================================
+*.tmp
+*.log
+*.bak
+*.backup
 .pypirc
-
-
-
-rtm.py

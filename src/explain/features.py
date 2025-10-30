@@ -22,7 +22,8 @@ def percentile_scale(x, lo=1.0, hi=99.0):
     return y
 
 def quantize_levels(x01, n_levels):
-    q = np.floor(x01 * n_levels).astype(np.int32)
+    """Quantize normalized values to discrete levels (uint32 for TMU)"""
+    q = np.floor(x01 * n_levels).astype(np.uint32)
     q[q == n_levels] = n_levels - 1
     return q
 
@@ -56,10 +57,11 @@ def rolling_windows(arr, window, stride):
     return as_strided(arr, shape=new_shape, strides=new_strides)
 
 def build_features(sig, window=128, stride=32, encoder="bitplanes", bits=8, levels=64, include_deriv=True):
+    """Build features for TMU (uint32 quantization)"""
     x01 = percentile_scale(zscore_clip(sig.astype(np.float32)))
     if encoder == "bitplanes":
         n_bits = int(bits)
-        q = np.rint(x01 * ((1 << n_bits) - 1)).astype(np.int32)
+        q = np.rint(x01 * ((1 << n_bits) - 1)).astype(np.uint32)
         q = np.clip(q, 0, (1 << n_bits) - 1)
         bp = int_to_bitplanes(q, n_bits)
         feats = bp

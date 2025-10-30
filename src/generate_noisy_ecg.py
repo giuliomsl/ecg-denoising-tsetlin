@@ -23,6 +23,11 @@ LOG_PARAMETERS = True
 METADATA_DIR = os.path.join(SEGMENTED_SIGNAL_DIR, 'metadata')
 RANDOM_SEED_BASE = 42
 
+MANIFEST_CSV_PATH = os.path.join(METADATA_DIR, 'segments_manifest.csv')
+MANIFEST_JSONL_PATH = os.path.join(METADATA_DIR, 'segments_manifest.jsonl')
+SUMMARY_JSON_PATH = os.path.join(METADATA_DIR, 'segments_summary.json')
+SUMMARY_CSV_PATH = os.path.join(METADATA_DIR, 'records_summary.csv')
+
 # Noise generation configs
 TARGET_SNR_RANGE = (5, 25)  # dB
 USE_SNR_TARGET = True
@@ -359,6 +364,124 @@ def save_segmented_signals_with_metadata(output_dir, base_record_name, segment_i
         print(f"❌ Error saving segment {base_record_name}_{segment_idx:03d}: {e}")
         return False
 
+def _flatten_noise_sources(noise_params):
+    if not noise_params:
+        return ''
+    parts = []
+    for noise_name, params in sorted(noise_params.items()):
+        source = params.get('source', 'unknown')
+        parts.append(f"{noise_name}:{source}")
+    return ';'.join(parts)
+
+def write_manifest_and_summary(manifest_entries, split_summary):
+    if not manifest_entries:
+        print("⚠️  No manifest entries collected; skipping manifest/summary export.")
+        return
+
+    fieldnames = [
+        "split",
+        "record_id",
+        "segment_index",
+        "segment_start",
+        "segment_length",
+        "fs",
+        "duration_sec",
+        "noise_combination",
+        "noise_sources",
+        "target_snr_db",
+        "actual_snr_db",
+        "segment_seed",
+        "component_seeds_json",
+        "noise_params_json",
+        "metadata_file",
+    ]
+
+    os.makedirs(METADATA_DIR, exist_ok=True)
+    with open(MANIFEST_CSV_PATH, 'w', newline='') as csv_out:
+        writer = csv.DictWriter(csv_out, fieldnames=fieldnames)
+        writer.writeheader()
+        for entry in manifest_entries:
+            writer.writerow({fn: entry.get(fn, "") for fn in fieldnames})
+
+    with open(MANIFEST_JSONL_PATH, 'w') as jsonl_out:
+        for entry in manifest_entries:
+            json_line = json.dumps(entry, ensure_ascii=True)
+            jsonl_out.write(json_line + "\n")
+
+    summary_payload = {
+        "total_segments": 0,
+        "total_duration_sec": 0.0,
+        "total_duration_hours": 0.0,
+        "splits": {},
+    }
+    records_rows = []
+
+    for split, stats in split_summary.items():
+        split_segments = stats.get("segments", 0)
+        duration_sec = stats.get("duration_sec", 0.0)
+        target_mean = (stats["target_snr_sum"] / split_segments) if split_segments else None
+        actual_mean = (stats["actual_snr_sum"] / split_segments) if split_segments else None
+        summary_payload["splits"][split] = {
+            "segments": split_segments,
+            "duration_sec": duration_sec,
+            "duration_hours": duration_sec / 3600 if duration_sec else 0.0,
+            "target_snr_mean": target_mean,
+            "actual_snr_mean": actual_mean,
+            "records": [],
+        }
+        summary_payload["total_segments"] += split_segments
+        summary_payload["total_duration_sec"] += duration_sec
+
+        for record_id, rec_stats in stats.get("records", {}).items():
+            rec_segments = rec_stats.get("segments", 0)
+            rec_duration = rec_stats.get("duration_sec", 0.0)
+            rec_target_mean = (rec_stats["target_snr_sum"] / rec_segments) if rec_segments else None
+            rec_actual_mean = (rec_stats["actual_snr_sum"] / rec_segments) if rec_segments else None
+            summary_payload["splits"][split]["records"].append({
+                "record_id": record_id,
+                "segments": rec_segments,
+                "duration_sec": rec_duration,
+                "duration_minutes": rec_duration / 60 if rec_duration else 0.0,
+                "target_snr_mean": rec_target_mean,
+                "actual_snr_mean": rec_actual_mean,
+            })
+            records_rows.append({
+                "split": split,
+                "record_id": record_id,
+                "segments": rec_segments,
+                "duration_sec": rec_duration,
+                "duration_minutes": rec_duration / 60 if rec_duration else 0.0,
+                "target_snr_mean": rec_target_mean,
+                "actual_snr_mean": rec_actual_mean,
+            })
+
+    summary_payload["total_duration_hours"] = summary_payload["total_duration_sec"] / 3600 if summary_payload["total_duration_sec"] else 0.0
+
+    with open(SUMMARY_JSON_PATH, 'w') as js_out:
+        json.dump(summary_payload, js_out, indent=2, ensure_ascii=True)
+
+    if records_rows:
+        rec_fieldnames = [
+            "split",
+            "record_id",
+            "segments",
+            "duration_sec",
+            "duration_minutes",
+            "target_snr_mean",
+            "actual_snr_mean",
+        ]
+        with open(SUMMARY_CSV_PATH, 'w', newline='') as csv_out:
+            writer = csv.DictWriter(csv_out, fieldnames=rec_fieldnames)
+            writer.writeheader()
+            for row in records_rows:
+                writer.writerow(row)
+
+    print(f"\n📝 Manifest written to: {MANIFEST_CSV_PATH}")
+    print(f"    Full metadata (JSONL): {MANIFEST_JSONL_PATH}")
+    print(f"📈 Summary written to: {SUMMARY_JSON_PATH}")
+    if records_rows:
+        print(f"    Record-level summary CSV: {SUMMARY_CSV_PATH}")
+
 def process_record_and_save_segments(ecg_record_name, split_dir):
     ecg_signal_full, fs = load_ecg_full(ecg_record_name)
     if ecg_signal_full is None:
@@ -383,6 +506,8 @@ def process_record_and_save_segments(ecg_record_name, split_dir):
     return segments_processed_count
 
 if __name__ == "__main__":
+    import h5py
+    
     # Determine splits by record using centralized split
     train_recs, val_recs, test_recs = get_train_test_split()
     split_map = {
@@ -390,11 +515,156 @@ if __name__ == "__main__":
         'validation': val_recs or [],
         'test': test_recs or [],
     }
-    total = 0
-    for split, recs in split_map.items():
-        split_dir = os.path.join(SEGMENTED_SIGNAL_DIR, split)
-        os.makedirs(split_dir, exist_ok=True)
-        print(f"Generating segments for split '{split}' with {len(recs)} records → {split_dir}")
-        for rec in tqdm(recs, desc=f"{split}"):
-            total += process_record_and_save_segments(rec, split_dir)
-    print(f"✅ Generation complete. Total segments: {total}")
+    
+    # Create HDF5 output file
+    h5_output_path = os.path.join(os.path.dirname(SEGMENTED_SIGNAL_DIR), "explain_input_dataset.h5")
+    print(f"\n📦 Creating HDF5 output: {h5_output_path}")
+    
+    manifest_entries = []
+    split_summary = {}
+
+    with h5py.File(h5_output_path, 'w') as h5_out:
+        # Set global attributes
+        h5_out.attrs['fs'] = 360
+        h5_out.attrs['segment_length'] = SEGMENT_LENGTH
+        h5_out.attrs['overlap_length'] = OVERLAP_LENGTH
+        h5_out.attrs['created_by'] = 'generate_noisy_ecg.py'
+        h5_out.attrs['random_seed'] = RANDOM_SEED_BASE
+        h5_out.attrs['snr_range'] = TARGET_SNR_RANGE
+        h5_out.attrs['timestamp'] = datetime.now().isoformat()
+        
+        total = 0
+        for split, recs in split_map.items():
+            if len(recs) == 0:
+                print(f"⚠️  No records for split '{split}', skipping...")
+                continue
+            
+            split_dir = os.path.join(SEGMENTED_SIGNAL_DIR, split)
+            os.makedirs(split_dir, exist_ok=True)
+            
+            print(f"\n{'='*70}")
+            print(f"Generating segments for split '{split}' with {len(recs)} records")
+            print(f"{'='*70}")
+            
+            # Collect all segments for this split
+            all_noisy = []
+            all_clean = []
+            
+            for rec in tqdm(recs, desc=f"{split}"):
+                ecg_signal_full, fs = load_ecg_full(rec)
+                if ecg_signal_full is None:
+                    continue
+                
+                clean_segments = segment_signal(ecg_signal_full, SEGMENT_LENGTH, OVERLAP_LENGTH)
+                num_segments = clean_segments.shape[0]
+                if num_segments == 0:
+                    continue
+                
+                for i in range(num_segments):
+                    clean_seg = clean_segments[i]
+                    noise_combo = choose_noise_combination(i, seed=RANDOM_SEED_BASE)
+                    target_snr = float(np.random.uniform(*TARGET_SNR_RANGE))
+                    noisy_seg, noise_seg, params = generate_combined_noise_snr_based(
+                        clean_seg, noise_combo, target_snr, RANDOM_SEED_BASE + i, fs
+                    )
+                    
+                    # Collect for HDF5
+                    all_noisy.append(noisy_seg)
+                    all_clean.append(clean_seg)
+                    
+                    # Save individual files for backward compatibility (optional)
+                    _ = save_segmented_signals_with_metadata(
+                        split_dir, rec, i, noisy_seg, noise_seg, clean_seg, params
+                    )
+                    total += 1
+
+                    segment_start = i * (SEGMENT_LENGTH - OVERLAP_LENGTH)
+                    segment_length = len(clean_seg)
+                    duration_sec = float(segment_length / fs) if fs else 0.0
+                    noise_params = params.get('noise_params', {})
+                    manifest_entries.append({
+                        "split": split,
+                        "record_id": rec,
+                        "segment_index": int(i),
+                        "segment_start": int(segment_start),
+                        "segment_length": int(segment_length),
+                        "fs": int(fs) if fs else None,
+                        "duration_sec": duration_sec,
+                        "noise_combination": ",".join(params.get('noise_combination', [])),
+                        "noise_sources": _flatten_noise_sources(noise_params),
+                        "target_snr_db": float(params.get('target_snr_db', 0.0)),
+                        "actual_snr_db": float(params.get('actual_snr_db', 0.0)),
+                        "segment_seed": int(params.get('segment_seed', 0)),
+                        "component_seeds_json": json.dumps(params.get('component_seeds', {}), ensure_ascii=True, sort_keys=True),
+                        "noise_params_json": json.dumps(noise_params, ensure_ascii=True, sort_keys=True),
+                        "metadata_file": f"metadata/{rec}_{i:03d}.json" if LOG_PARAMETERS else "",
+                    })
+
+                    split_entry = split_summary.setdefault(split, {
+                        "segments": 0,
+                        "duration_sec": 0.0,
+                        "target_snr_sum": 0.0,
+                        "actual_snr_sum": 0.0,
+                        "records": {},
+                    })
+                    record_entry = split_entry["records"].setdefault(rec, {
+                        "segments": 0,
+                        "duration_sec": 0.0,
+                        "target_snr_sum": 0.0,
+                        "actual_snr_sum": 0.0,
+                    })
+
+                    for entry in (split_entry, record_entry):
+                        entry["segments"] += 1
+                        entry["duration_sec"] += duration_sec
+                        entry["target_snr_sum"] += float(params.get('target_snr_db', 0.0))
+                        entry["actual_snr_sum"] += float(params.get('actual_snr_db', 0.0))
+
+                    split_entry["records"][rec] = record_entry
+                    split_summary[split] = split_entry
+            
+            # Write to HDF5
+            if len(all_noisy) > 0:
+                print(f"\n💾 Writing {len(all_noisy)} segments to HDF5 for split '{split}'...")
+                noisy_array = np.array(all_noisy, dtype=np.float32)
+                clean_array = np.array(all_clean, dtype=np.float32)
+                
+                h5_out.create_dataset(
+                    f"{split}_noisy",
+                    data=noisy_array,
+                    compression='gzip',
+                    compression_opts=4
+                )
+                h5_out.create_dataset(
+                    f"{split}_clean",
+                    data=clean_array,
+                    compression='gzip',
+                    compression_opts=4
+                )
+                
+                print(f"  ✅ {split}_noisy: {noisy_array.shape}")
+                print(f"  ✅ {split}_clean: {clean_array.shape}")
+                print(f"  📊 Stats - Noisy: [{noisy_array.min():.3f}, {noisy_array.max():.3f}]")
+                print(f"  📊 Stats - Clean: [{clean_array.min():.3f}, {clean_array.max():.3f}]")
+    
+    write_manifest_and_summary(manifest_entries, split_summary)
+
+    print(f"\n{'='*70}")
+    print(f"✅ Generation complete!")
+    print(f"{'='*70}")
+    print(f"📊 Total segments: {total}")
+    print(f"📁 HDF5 output: {h5_output_path}")
+    print(f"💾 File size: {os.path.getsize(h5_output_path) / (1024**2):.1f} MB")
+    
+    # Verify HDF5
+    print(f"\n🔍 Verification:")
+    with h5py.File(h5_output_path, 'r') as f:
+        print(f"  Keys: {list(f.keys())}")
+        for key in f.keys():
+            print(f"    {key}: shape={f[key].shape}, dtype={f[key].dtype}")
+    
+    print(f"\n💡 Next step:")
+    print(f"  python src/explain/prepare_and_build_explain_dataset.py \\")
+    print(f"    --input-h5 {h5_output_path} \\")
+    print(f"    --out-h5 data/explain_features_dataset.h5 \\")
+    print(f"    --encoder bitplanes --bits 8 --window 512 --stride 256 --include-deriv")
