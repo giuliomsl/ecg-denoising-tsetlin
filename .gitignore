@@ -74,6 +74,8 @@
 # ============================================================================
 !src/explainability/
 !src/explainability/__init__.py
+!src/explainability/README.md
+!src/explainability/analyze_explainability.py
 !src/explainability/complete_explainability_analysis.py
 !src/explainability/explain_v7_complete.py
 !src/explainability/explain_feature_importance.py
