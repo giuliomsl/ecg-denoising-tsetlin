@@ -107,24 +107,35 @@ python -m src.inference.test_v7_optimized
 
 ### FASE 7: Explainability
 ```bash
-# Complete white-box analysis
-python -m src.explainability.complete_explainability_analysis
+# 🆕 UNIFIED SCRIPT - Recommended approach
+# Complete analysis (all modules)
+python -m src.explainability.analyze_explainability \
+    --analysis all \
+    --models models/tmu_v7/ \
+    --dataset data/explain_features_dataset_v7_th0.0005.h5 \
+    --tasks bw emg \
+    --method rf_proxy \
+    --output plots/explainability/
 
-# V7-specific feature importance
-python -m src.explainability.explain_v7_complete
+# Individual modules (if needed)
+python -m src.explainability.analyze_explainability --analysis weights --models models/tmu_v7/ --tasks bw emg
+python -m src.explainability.analyze_explainability --analysis features --models models/tmu_v7/ --dataset data/explain_features_dataset_v7_th0.0005.h5 --tasks bw emg --method rf_proxy
+python -m src.explainability.analyze_explainability --analysis rules --models models/tmu_v7/ --dataset data/explain_features_dataset_v7_th0.0005.h5 --tasks bw --top-k 15
+python -m src.explainability.analyze_explainability --analysis patterns --models models/tmu_v7/ --dataset data/explain_features_dataset_v7_th0.0005.h5 --tasks bw emg
 
-# Extract logical rules
-python -m src.explainability.explain_rules_extraction
+# Legacy scripts (deprecated, use analyze_explainability.py instead)
+# python -m src.explainability.complete_explainability_analysis
+# python -m src.explainability.explain_v7_complete
+# python -m src.explainability.explain_rules_extraction
+# python -m src.explainability.explain_weights_simple
 
-# Analyze clause weights
-python -m src.explainability.explain_weights_simple
-
-# Analyze V7 rules
+# Analyze extracted rules
 python -m src.evaluation.analyze_v7_rules
 ```
 **Output:** 
-- `results/explainability_analysis.json`
-- `plots/explainability/`
+- `plots/explainability/*.png` - High-res visualizations (weights, features, rules, patterns)
+- `plots/explainability/*.json` - Machine-readable statistics
+- `plots/explainability/explainability_results_all.json` - Complete summary
 
 ---
 
@@ -166,9 +177,13 @@ python -m src.visualization.visualize_denoising_with_explainability
 ### **Explainability**
 | File | Purpose |
 |------|---------|
-| `src/explainability/complete_explainability_analysis.py` | Complete white-box analysis |
-| `src/explainability/explain_v7_complete.py` | V7 feature importance |
-| `src/explainability/explain_rules_extraction.py` | Extract logical rules |
+| `src/explainability/analyze_explainability.py` | 🆕 **UNIFIED SCRIPT** - All explainability analyses |
+| `src/explainability/README.md` | Complete usage guide with examples |
+| `src/explainability/complete_explainability_analysis.py` | ⚠️ Deprecated - use analyze_explainability.py |
+| `src/explainability/explain_v7_complete.py` | ⚠️ Deprecated - use analyze_explainability.py |
+| `src/explainability/explain_rules_extraction.py` | ⚠️ Deprecated - use analyze_explainability.py |
+| `src/explainability/explain_weights_simple.py` | ⚠️ Deprecated - use analyze_explainability.py |
+| `src/explainability/explain_feature_importance.py` | ⚠️ Deprecated - use analyze_explainability.py |
 | `src/evaluation/analyze_v7_rules.py` | Analyze extracted rules |
 | `src/evaluation/analyze_v7_calibration.py` | Calibration impact analysis |
 
@@ -240,12 +255,12 @@ python train_tmu_v7.py --clauses 2000
 ## 🚀 **One-Line Complete Pipeline**
 ```bash
 # Run entire pipeline (assumes data is prepared)
-python create_v7_dataset.py && \
-python train_tmu_v7.py --seed 42 && \
-python inference_v7.py && \
-python evaluate_v7.py && \
-python complete_explainability_analysis.py && \
-python visualize_explainability_features_v7.py
+python -m src.feature_engineering.create_v7_dataset --strategy th0.0005 && \
+python -m src.training.train_tmu_v7 --seed 42 && \
+python -m src.inference.inference_v7 && \
+python -m src.evaluation.evaluate_v7 && \
+python -m src.explainability.analyze_explainability --analysis all --models models/tmu_v7/ --dataset data/explain_features_dataset_v7_th0.0005.h5 --tasks bw emg --method rf_proxy && \
+python -m src.visualization.visualize_explainability_features_v7
 ```
 
 ---
