@@ -107,8 +107,8 @@ python -m src.inference.test_v7_optimized
 
 ### FASE 7: Explainability
 ```bash
-# 🆕 UNIFIED SCRIPT - Recommended approach
-# Complete analysis (all modules)
+# 🆕 UNIFIED SCRIPT - Solo questo da usare
+# Analisi completa (tutti i moduli)
 python -m src.explainability.analyze_explainability \
     --analysis all \
     --models models/tmu_v7/ \
@@ -117,20 +117,17 @@ python -m src.explainability.analyze_explainability \
     --method rf_proxy \
     --output plots/explainability/
 
-# Individual modules (if needed)
+# Moduli individuali (esempi)
 python -m src.explainability.analyze_explainability --analysis weights --models models/tmu_v7/ --tasks bw emg
 python -m src.explainability.analyze_explainability --analysis features --models models/tmu_v7/ --dataset data/explain_features_dataset_v7_th0.0005.h5 --tasks bw emg --method rf_proxy
 python -m src.explainability.analyze_explainability --analysis rules --models models/tmu_v7/ --dataset data/explain_features_dataset_v7_th0.0005.h5 --tasks bw --top-k 15
 python -m src.explainability.analyze_explainability --analysis patterns --models models/tmu_v7/ --dataset data/explain_features_dataset_v7_th0.0005.h5 --tasks bw emg
 
-# Legacy scripts (deprecated, use analyze_explainability.py instead)
-# python -m src.explainability.complete_explainability_analysis
-# python -m src.explainability.explain_v7_complete
-# python -m src.explainability.explain_rules_extraction
-# python -m src.explainability.explain_weights_simple
-
-# Analyze extracted rules
+# Analisi regole estratte (script separato)
 python -m src.evaluation.analyze_v7_rules
+
+# ⚠️  Script legacy archiviati in: archivio/explainability_legacy/
+#     (mantenuti solo per riferimento storico)
 ```
 **Output:** 
 - `plots/explainability/*.png` - High-res visualizations (weights, features, rules, patterns)
@@ -177,15 +174,11 @@ python -m src.visualization.visualize_denoising_with_explainability
 ### **Explainability**
 | File | Purpose |
 |------|---------|
-| `src/explainability/analyze_explainability.py` | 🆕 **UNIFIED SCRIPT** - All explainability analyses |
+| `src/explainability/analyze_explainability.py` | ✅ **UNIFIED SCRIPT** - All explainability analyses |
 | `src/explainability/README.md` | Complete usage guide with examples |
-| `src/explainability/complete_explainability_analysis.py` | ⚠️ Deprecated - use analyze_explainability.py |
-| `src/explainability/explain_v7_complete.py` | ⚠️ Deprecated - use analyze_explainability.py |
-| `src/explainability/explain_rules_extraction.py` | ⚠️ Deprecated - use analyze_explainability.py |
-| `src/explainability/explain_weights_simple.py` | ⚠️ Deprecated - use analyze_explainability.py |
-| `src/explainability/explain_feature_importance.py` | ⚠️ Deprecated - use analyze_explainability.py |
 | `src/evaluation/analyze_v7_rules.py` | Analyze extracted rules |
 | `src/evaluation/analyze_v7_calibration.py` | Calibration impact analysis |
+| `archivio/explainability_legacy/` | 📦 Legacy scripts (archived, 5 files) |
 
 ### **Visualization**
 | File | Purpose |

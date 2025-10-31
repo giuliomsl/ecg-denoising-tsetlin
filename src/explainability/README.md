@@ -6,12 +6,20 @@ Analisi white-box completa dei modelli Tsetlin Machine per ECG denoising.
 
 ### `analyze_explainability.py` - Unified Analysis Tool
 
-**Script unificato** che sostituisce i 5 script individuali precedenti:
-- ~~`complete_explainability_analysis.py`~~ → integrato
-- ~~`explain_v7_complete.py`~~ → integrato
-- ~~`explain_feature_importance.py`~~ → integrato
-- ~~`explain_rules_extraction.py`~~ → integrato
-- ~~`explain_weights_simple.py`~~ → integrato
+**Script unificato** che sostituisce i 5 script individuali precedenti (ora archiviati in `archivio/explainability_legacy/`):
+- ~~`complete_explainability_analysis.py`~~ → archiviato
+- ~~`explain_v7_complete.py`~~ → archiviato
+- ~~`explain_feature_importance.py`~~ → archiviato
+- ~~`explain_rules_extraction.py`~~ → archiviato
+- ~~`explain_weights_simple.py`~~ → archiviato
+
+**Struttura attuale (pulita):**
+```
+src/explainability/
+├── __init__.py
+├── analyze_explainability.py  ← SCRIPT PRINCIPALE (1164 righe)
+└── README.md                   ← Questa guida
+```
 
 ## 📖 Quick Start
 

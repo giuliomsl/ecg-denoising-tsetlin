@@ -76,11 +76,11 @@
 !src/explainability/__init__.py
 !src/explainability/README.md
 !src/explainability/analyze_explainability.py
-!src/explainability/complete_explainability_analysis.py
-!src/explainability/explain_v7_complete.py
-!src/explainability/explain_feature_importance.py
-!src/explainability/explain_rules_extraction.py
-!src/explainability/explain_weights_simple.py
+
+# Legacy scripts (archiviati)
+!archivio/explainability_legacy/
+!archivio/explainability_legacy/README.md
+!archivio/explainability_legacy/*.py
 
 # ============================================================================
 # FASE 8: VISUALIZATION
