@@ -17,21 +17,21 @@
 
 ## 🔄 **Pipeline Execution Order**
 
-### 1️⃣ **DATA PREPARATION**
+### FASE 1: Data Preparation
 ```bash
 # Load MIT-BIH records
-python src/load_ecg.py
+python -m src.data_preparation.load_ecg
 
 # Generate noisy segments with metadata
-python src/generate_noisy_ecg.py
+python -m src.data_preparation.generate_noisy_ecg
 ```
 **Output:** `data/segmented_signals/{train,validation,test}/`
 
 ---
 
-### 2️⃣ **FEATURE EXTRACTION** (1092 features)
+### FASE 2: Feature Extraction (1092 features)
 ```bash
-python src/explain/prepare_and_build_explain_dataset_v2.py \
+python -m src.feature_engineering.prepare_and_build_explain_dataset_v2 \
   --input data/explain_input_dataset.h5 \
   --output data/explain_features_dataset_v2.h5
 ```
@@ -39,33 +39,33 @@ python src/explain/prepare_and_build_explain_dataset_v2.py \
 
 ---
 
-### 3️⃣ **FEATURE SELECTION** (57 features)
+### FASE 3: Feature Selection (57 features)
 ```bash
 # Analyze bitplane importance
-python analyze_bitplane_importance.py
+python -m src.feature_engineering.analyze_bitplane_importance
 
 # Create V7 dataset (threshold strategy)
-python create_v7_dataset.py --strategy th0.0005
+python -m src.feature_engineering.create_v7_dataset --strategy th0.0005
 ```
 **Output:** `data/explain_features_dataset_v7_th0.0005.h5` (45 BP + 12 HF)
 
 **Alternative:** Union-per-task strategy (~80 features)
 ```bash
-python src/create_v7b_union_dataset.py --top-k 50
+python -m src.feature_engineering.create_v7b_union_dataset --top-k 50
 ```
 
 ---
 
-### 4️⃣ **TRAINING**
+### FASE 4: Training
 ```bash
 # Base training
-python train_tmu_v7.py --seed 42
+python -m src.training.train_tmu_v7 --seed 42
 
 # Grid search for optimal hyperparameters
-python grid_search_v7_hyperparams.py
+python -m src.training.grid_search_v7_hyperparams
 
 # Retrain with optimal hyperparams
-python train_tmu_v7.py \
+python -m src.training.train_tmu_v7 \
   --clauses 3000 --T 700 --s 7.0 \
   --output models/tmu_v7_optimized
 ```
@@ -75,9 +75,9 @@ python train_tmu_v7.py \
 
 ---
 
-### 5️⃣ **INFERENCE**
+### FASE 5: Inference
 ```bash
-python inference_v7.py \
+python -m src.inference.inference_v7 \
   --models models/tmu_v7_optimized \
   --features data/explain_features_dataset_v7_th0.0005.h5
 ```
@@ -85,19 +85,19 @@ python inference_v7.py \
 
 ---
 
-### 6️⃣ **EVALUATION**
+### FASE 6: Evaluation
 ```bash
 # Performance comparison
-python evaluate_v7.py
+python -m src.evaluation.evaluate_v7
 
 # Calibration analysis
-python analyze_v7_calibration.py
+python -m src.evaluation.analyze_v7_calibration
 
 # Grid search analysis
-python analyze_grid_search.py
+python -m src.evaluation.analyze_grid_search
 
 # Test optimized model
-python test_v7_optimized.py
+python -m src.inference.test_v7_optimized
 ```
 **Output:** 
 - `results/v7_evaluation/`
@@ -105,22 +105,22 @@ python test_v7_optimized.py
 
 ---
 
-### 7️⃣ **EXPLAINABILITY**
+### FASE 7: Explainability
 ```bash
 # Complete white-box analysis
-python complete_explainability_analysis.py
+python -m src.explainability.complete_explainability_analysis
 
 # V7-specific feature importance
-python explain_v7_complete.py
+python -m src.explainability.explain_v7_complete
 
 # Extract logical rules
-python explain_rules_extraction.py
+python -m src.explainability.explain_rules_extraction
 
 # Analyze clause weights
-python explain_weights_simple.py
+python -m src.explainability.explain_weights_simple
 
 # Analyze V7 rules
-python analyze_v7_rules.py
+python -m src.evaluation.analyze_v7_rules
 ```
 **Output:** 
 - `results/explainability_analysis.json`
@@ -128,16 +128,16 @@ python analyze_v7_rules.py
 
 ---
 
-### 8️⃣ **VISUALIZATION**
+### FASE 8: Visualization
 ```bash
 # Overview for thesis (publication-ready)
-python visualize_explainability_features_v7.py
+python -m src.visualization.visualize_explainability_features_v7
 
 # Visualize extracted rules
-python visualize_v7_rules.py
+python -m src.visualization.visualize_v7_rules
 
 # Complete denoising pipeline demo
-python visualize_denoising_with_explainability.py
+python -m src.visualization.visualize_denoising_with_explainability
 ```
 **Output:** `plots/explainability_features_v7/`
 
@@ -148,36 +148,36 @@ python visualize_denoising_with_explainability.py
 ### **Core Pipeline**
 | File | Purpose |
 |------|---------|
-| `src/load_ecg.py` | Load MIT-BIH clean records |
-| `src/generate_noisy_ecg.py` | Generate noisy segments |
-| `src/explain/prepare_and_build_explain_dataset_v2.py` | Extract 1092 features |
-| `create_v7_dataset.py` | Select 57 features (threshold) |
-| `train_tmu_v7.py` | Train TMU models |
-| `inference_v7.py` | Generate predictions |
-| `evaluate_v7.py` | Performance evaluation |
+| `src/data_preparation/load_ecg.py` | Load MIT-BIH clean records |
+| `src/data_preparation/generate_noisy_ecg.py` | Generate noisy segments |
+| `src/feature_engineering/prepare_and_build_explain_dataset_v2.py` | Extract 1092 features |
+| `src/feature_engineering/create_v7_dataset.py` | Select 57 features (threshold) |
+| `src/training/train_tmu_v7.py` | Train TMU models |
+| `src/inference/inference_v7.py` | Generate predictions |
+| `src/evaluation/evaluate_v7.py` | Performance evaluation |
 
 ### **Optimization**
 | File | Purpose |
 |------|---------|
-| `grid_search_v7_hyperparams.py` | Hyperparameter optimization |
-| `analyze_grid_search.py` | Analyze grid search results |
-| `analyze_bitplane_importance.py` | Bitplane importance analysis |
+| `src/training/grid_search_v7_hyperparams.py` | Hyperparameter optimization |
+| `src/evaluation/analyze_grid_search.py` | Analyze grid search results |
+| `src/feature_engineering/analyze_bitplane_importance.py` | Bitplane importance analysis |
 
 ### **Explainability**
 | File | Purpose |
 |------|---------|
-| `complete_explainability_analysis.py` | Complete white-box analysis |
-| `explain_v7_complete.py` | V7 feature importance |
-| `explain_rules_extraction.py` | Extract logical rules |
-| `analyze_v7_rules.py` | Analyze extracted rules |
-| `analyze_v7_calibration.py` | Calibration impact analysis |
+| `src/explainability/complete_explainability_analysis.py` | Complete white-box analysis |
+| `src/explainability/explain_v7_complete.py` | V7 feature importance |
+| `src/explainability/explain_rules_extraction.py` | Extract logical rules |
+| `src/evaluation/analyze_v7_rules.py` | Analyze extracted rules |
+| `src/evaluation/analyze_v7_calibration.py` | Calibration impact analysis |
 
 ### **Visualization**
 | File | Purpose |
 |------|---------|
-| `visualize_explainability_features_v7.py` | Publication-ready overview |
-| `visualize_v7_rules.py` | Rules visualization |
-| `visualize_denoising_with_explainability.py` | Pipeline demo |
+| `src/visualization/visualize_explainability_features_v7.py` | Publication-ready overview |
+| `src/visualization/visualize_v7_rules.py` | Rules visualization |
+| `src/visualization/visualize_denoising_with_explainability.py` | Pipeline demo |
 
 ---
 

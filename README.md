@@ -17,16 +17,16 @@ Sistema white-box interpretabile per il denoising ECG basato su **Tsetlin Machin
 ### **FASE 1: Preparazione Dati**
 ```bash
 # 1.1. Carica record MIT-BIH
-python src/load_ecg.py
+python -m src.data_preparation.load_ecg
 
 # 1.2. Genera segmenti rumorosi con metadati
-python src/generate_noisy_ecg.py
+python -m src.data_preparation.generate_noisy_ecg
 ```
 
 ### **FASE 2: Feature Extraction**
 ```bash
 # Estrae 1092 features (1080 bitplanes + 12 HF)
-python src/explain/prepare_and_build_explain_dataset_v2.py \
+python -m src.feature_engineering.prepare_and_build_explain_dataset_v2 \
   --input data/explain_input_dataset.h5 \
   --output data/explain_features_dataset_v2.h5 \
   --window 360 --stride 120
@@ -35,32 +35,32 @@ python src/explain/prepare_and_build_explain_dataset_v2.py \
 ### **FASE 3: Feature Selection**
 ```bash
 # Analizza importanza bitplanes
-python analyze_bitplane_importance.py
+python -m src.feature_engineering.analyze_bitplane_importance
 
 # OPZIONE A: V7 con threshold (57 features)
-python create_v7_dataset.py --strategy th0.0005
+python -m src.feature_engineering.create_v7_dataset --strategy th0.0005
 
 # OPZIONE B: V7b con union per-task (~80 features)
-python src/create_v7b_union_dataset.py --top-k 50
+python -m src.feature_engineering.create_v7b_union_dataset --top-k 50
 ```
 
 ### **FASE 4: Training**
 ```bash
 # 4.1. Training base V7
-python train_tmu_v7.py \
+python -m src.training.train_tmu_v7 \
   --features data/explain_features_dataset_v7_th0.0005.h5 \
   --output models/tmu_v7_selected \
   --clauses 10000 --T 700 --s 3.5 \
   --epochs 10 --patience 3 --seed 42
 
 # 4.2. Grid Search per ottimizzazione hyperparameters
-python grid_search_v7_hyperparams.py \
+python -m src.training.grid_search_v7_hyperparams \
   --features data/explain_features_dataset_v7_th0.0005.h5 \
   --output results/v7_grid_search \
   --seed 42 --patience 2 --max-epochs 10
 
 # 4.3. Retrain con hyperparams ottimali (T=700, s=7.0)
-python train_tmu_v7.py \
+python -m src.training.train_tmu_v7 \
   --features data/explain_features_dataset_v7_th0.0005.h5 \
   --output models/tmu_v7_optimized \
   --clauses 3000 --T 700 --s 7.0 \
@@ -70,58 +70,58 @@ python train_tmu_v7.py \
 ### **FASE 5: Inference & Calibration**
 ```bash
 # 5.1. Genera predizioni sul test set
-python inference_v7.py \
+python -m src.inference.inference_v7 \
   --models models/tmu_v7_selected \
   --features data/explain_features_dataset_v7_th0.0005.h5 \
   --output results/v7_predictions
 
 # 5.2. Analizza impatto calibrazione isotonica
-python analyze_v7_calibration.py
+python -m src.evaluation.analyze_v7_calibration
 
 # 5.3. Test modello ottimizzato
-python test_v7_optimized.py
+python -m src.inference.test_v7_optimized
 ```
 
 ### **FASE 6: Evaluation**
 ```bash
 # 6.1. Confronto V7 vs V4
-python evaluate_v7.py \
+python -m src.evaluation.evaluate_v7 \
   --v7-predictions results/v7_predictions/v7_test_predictions.npz \
   --v4-predictions results/v4_test_predictions.npz \
   --output results/v7_evaluation
 
 # 6.2. Analisi grid search
-python analyze_grid_search.py
+python -m src.evaluation.analyze_grid_search
 ```
 
 ### **FASE 7: Explainability Analysis**
 ```bash
 # 7.1. Analisi completa white-box
-python complete_explainability_analysis.py
+python -m src.explainability.complete_explainability_analysis
 
 # 7.2. Feature importance V7
-python explain_v7_complete.py
+python -m src.explainability.explain_v7_complete
 
 # 7.3. Estrazione regole logiche
-python explain_rules_extraction.py
+python -m src.explainability.explain_rules_extraction
 
 # 7.4. Analisi pesi clausole
-python explain_weights_simple.py
+python -m src.explainability.explain_weights_simple
 
 # 7.5. Analisi regole V7
-python analyze_v7_rules.py
+python -m src.evaluation.analyze_v7_rules
 ```
 
 ### **FASE 8: Visualization**
 ```bash
 # 8.1. Panoramica explainability per tesi
-python visualize_explainability_features_v7.py
+python -m src.visualization.visualize_explainability_features_v7
 
 # 8.2. Visualizza regole estratte
-python visualize_v7_rules.py
+python -m src.visualization.visualize_v7_rules
 
 # 8.3. Demo pipeline denoising completo
-python visualize_denoising_with_explainability.py
+python -m src.visualization.visualize_denoising_with_explainability
 ```
 
 ---
@@ -137,23 +137,23 @@ pip install -r requirements.txt
 ### Esecuzione Pipeline Completa
 ```bash
 # 1. Preparazione dati (se non già fatto)
-python src/generate_noisy_ecg.py
-python src/explain/prepare_and_build_explain_dataset_v2.py
+python -m src.data_preparation.generate_noisy_ecg
+python -m src.feature_engineering.prepare_and_build_explain_dataset_v2
 
 # 2. Feature selection V7
-python create_v7_dataset.py --strategy th0.0005
+python -m src.feature_engineering.create_v7_dataset --strategy th0.0005
 
 # 3. Training
-python train_tmu_v7.py --seed 42
+python -m src.training.train_tmu_v7 --seed 42
 
 # 4. Inference & Evaluation
-python inference_v7.py
-python evaluate_v7.py
-python analyze_v7_calibration.py
+python -m src.inference.inference_v7
+python -m src.evaluation.evaluate_v7
+python -m src.evaluation.analyze_v7_calibration
 
 # 5. Explainability
-python complete_explainability_analysis.py
-python visualize_explainability_features_v7.py
+python -m src.explainability.complete_explainability_analysis
+python -m src.visualization.visualize_explainability_features_v7
 ```
 
 ---
@@ -183,42 +183,59 @@ python visualize_explainability_features_v7.py
 
 ```
 .
-├── README.md                          # Questo file
-├── FINAL_PROJECT_REPORT_IT.md        # Report finale progetto
-├── requirements.txt                   # Dipendenze Python
+├── README.md                          # Main documentation
+├── FINAL_PROJECT_REPORT_IT.md        # Technical report
+├── PIPELINE_V7_SUMMARY.md            # Quick reference
+├── REPOSITORY_STATUS.md              # Repository health status
+├── requirements.txt                   # Dependencies
 │
-├── src/                               # Codice sorgente core
-│   ├── load_ecg.py                   # Caricamento MIT-BIH
-│   ├── generate_noisy_ecg.py         # Generazione segmenti rumorosi
-│   ├── create_v7b_union_dataset.py   # Feature selection V7b
-│   └── explain/                       # Modulo explainability
-│       ├── features.py               # Encoding features (bitplanes, thermometer)
-│       ├── advanced_features.py      # Features spettrali HF
-│       └── prepare_and_build_explain_dataset_v2.py  # Feature extraction
-│
-├── create_v7_dataset.py              # Feature selection V7
-├── analyze_bitplane_importance.py    # Analisi importanza bitplanes
-│
-├── train_tmu_v7.py                   # Training TMU V7
-├── grid_search_v7_hyperparams.py     # Ottimizzazione hyperparameters
-│
-├── inference_v7.py                   # Inference test set
-├── test_v7_optimized.py              # Test modello ottimizzato
-├── evaluate_v7.py                    # Evaluation vs baseline
-│
-├── analyze_v7_calibration.py         # Analisi calibrazione
-├── analyze_v7_rules.py               # Analisi regole
-├── analyze_grid_search.py            # Analisi grid search
-│
-├── complete_explainability_analysis.py  # Explainability completa
-├── explain_v7_complete.py            # Feature importance V7
-├── explain_feature_importance.py     # Importanza generale
-├── explain_rules_extraction.py       # Estrazione regole logiche
-├── explain_weights_simple.py         # Analisi pesi
-│
-├── visualize_explainability_features_v7.py  # Viz per tesi
-├── visualize_v7_rules.py             # Viz regole
-└── visualize_denoising_with_explainability.py  # Demo pipeline
+└── src/                               # Source code organized by phase
+    ├── README.md                      # Source organization guide
+    ├── config.py                      # Global configuration
+    │
+    ├── data_preparation/              # FASE 1: Data Preparation
+    │   ├── load_ecg.py               # MIT-BIH loader
+    │   └── generate_noisy_ecg.py     # Noisy segment generator
+    │
+    ├── feature_engineering/           # FASE 2-3: Feature Engineering
+    │   ├── features.py               # Feature encoding
+    │   ├── advanced_features.py      # HF features
+    │   ├── prepare_and_build_explain_dataset_v2.py
+    │   ├── analyze_bitplane_importance.py
+    │   ├── create_v7_dataset.py
+    │   └── create_v7b_union_dataset.py
+    │
+    ├── training/                      # FASE 4: Training
+    │   ├── train_tmu_v7.py
+    │   └── grid_search_v7_hyperparams.py
+    │
+    ├── inference/                     # FASE 5: Inference & Calibration
+    │   ├── inference_v7.py
+    │   ├── test_v7_optimized.py
+    │   ├── infer_tmu.py
+    │   ├── infer_tmu_calibrated.py
+    │   └── calibrate_*.py
+    │
+    ├── evaluation/                    # FASE 6: Evaluation
+    │   ├── evaluate_v7.py
+    │   ├── analyze_v7_calibration.py
+    │   ├── analyze_v7_rules.py
+    │   └── analyze_grid_search.py
+    │
+    ├── explainability/                # FASE 7: Explainability
+    │   ├── complete_explainability_analysis.py
+    │   ├── explain_v7_complete.py
+    │   ├── explain_feature_importance.py
+    │   └── explain_*.py
+    │
+    ├── visualization/                 # FASE 8: Visualization
+    │   ├── visualize_explainability_features_v7.py
+    │   ├── visualize_v7_rules.py
+    │   └── visualize_denoising_with_explainability.py
+    │
+    └── utils/                         # Utilities
+        ├── pattern_templates.py
+        └── rtm_io.py
 ```
 
 ---
