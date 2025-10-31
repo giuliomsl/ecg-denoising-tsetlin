@@ -198,3 +198,13 @@ build/
 *.bak
 *.backup
 .pypirc
+
+# ============================================================================
+# FILE DATI: Escludi JSON, CSV, TXT
+# ============================================================================
+*.json
+*.csv
+*.txt
+
+# ECCEZIONE: Mantieni requirements.txt (essenziale per dipendenze)
+!requirements.txt
